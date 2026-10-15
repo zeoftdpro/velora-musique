@@ -34,5 +34,18 @@ services:
         sync: false
       - key: MEILI_HOST
         value: ""
+      # Fichiers audio et pochettes : Supabase Storage (protocole S3), bucket privé « velora ».
       - key: STORAGE_DRIVER
-        value: local
+        value: s3
+      - key: S3_ENDPOINT
+        value: https://xrepowedxmcmubruhywj.storage.supabase.co/storage/v1/s3
+      - key: S3_REGION
+        value: eu-west-1
+      - key: S3_BUCKET
+        value: velora
+      - key: S3_FORCE_PATH_STYLE
+        value: "true"
+      - key: S3_ACCESS_KEY_ID # clé d'accès S3 Supabase (Storage → S3 → Access keys)
+        sync: false
+      - key: S3_SECRET_ACCESS_KEY
+        sync: false
