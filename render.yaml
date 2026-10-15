@@ -1,0 +1,34 @@
+# Blueprint Render : serveur Velora (apps/api). Render → New → Blueprint → choisir ce dépôt.
+# Les valeurs marquées « sync: false » sont demandées dans le tableau de bord à la création.
+services:
+  - type: web
+    name: velora-api
+    runtime: node
+    plan: free
+    region: frankfurt
+    buildCommand: npm install --workspace apps/api --include-workspace-root && npm run build -w apps/api
+    # Les migrations s'appliquent à chaque démarrage (sans effet si la base est à jour).
+    startCommand: node apps/api/dist/scripts/migrate.js && node apps/api/dist/server.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      # L'appli Windows n'est pas construite sur le serveur : inutile de télécharger Electron.
+      - key: ELECTRON_SKIP_BINARY_DOWNLOAD
+        value: "1"
+      - key: DATABASE_URL # chaîne de connexion Supabase (Session pooler), comme dans ton .env
+        sync: false
+      - key: DB_POOL_MAX
+        value: "5"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: WEB_ORIGIN # adresse du site Netlify, ex. https://velora.netlify.app
+        sync: false
+      - key: YOUTUBE_API_KEY
+        sync: false
+      - key: JAMENDO_CLIENT_ID
+        sync: false
+      - key: MEILI_HOST
+        value: ""
+      - key: STORAGE_DRIVER
+        value: local

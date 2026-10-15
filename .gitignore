@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+storage/
+music/
+*.log
+.DS_Store
+.pgdata/
+apps/desktop/release/
+apps/web/public/downloads/

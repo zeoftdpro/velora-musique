@@ -1,0 +1,494 @@
+// Build « light » de hls.js : sans sous-titres ni DRM, inutiles pour un flux audio.
+import Hls from 'hls.js/light';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { api, ApiError, type Track } from '../api';
+import { EyeOffIcon, MaximizeIcon, MinimizeIcon } from '../components/icons';
+import { loadYouTubeApi, YT_STATE, YT_UNPLAYABLE, type YTPlayer } from '../youtube';
+import { useToast } from './toast';
+
+type PlayerState = {
+  queue: Track[];
+  index: number;
+  current: Track | null;
+  playing: boolean;
+  loading: boolean;
+  volume: number;
+  muted: boolean;
+  quality: string | null;
+  /** Vidéo YouTube masquée : le son continue, le mini-lecteur n'est plus affiché. */
+  videoHidden: boolean;
+  toggleVideo: () => void;
+  playQueue: (tracks: Track[], startIndex?: number) => void;
+  toggle: () => void;
+  next: () => void;
+  prev: () => void;
+  seek: (seconds: number) => void;
+  setVolume: (volume: number) => void;
+  toggleMute: () => void;
+};
+
+type Progress = { currentTime: number; duration: number; buffered: number };
+
+/** Moteur de lecture : élément audio (HLS ou MP3) ou lecteur YouTube officiel intégré. */
+type Engine = 'audio' | 'youtube';
+
+const PlayerContext = createContext<PlayerState | null>(null);
+// Contexte séparé pour la progression : évite de re-rendre toute l'app à chaque `timeupdate`.
+const ProgressContext = createContext<Progress>({ currentTime: 0, duration: 0, buffered: 0 });
+
+const VOLUME_KEY = 'velora.volume';
+const DOCK_KEY = 'velora.ytDock';
+const VIDEO_HIDDEN_KEY = 'velora.ytHidden';
+
+function readStoredVideoHidden() {
+  try {
+    return localStorage.getItem(VIDEO_HIDDEN_KEY) !== 'false'; // masquée par défaut
+  } catch {
+    return true;
+  }
+}
+
+/** Tailles du mini-lecteur YouTube ; « compact » correspond au minimum autorisé par YouTube (200 × 200 px). */
+const DOCK_SIZES = ['compact', 'normal', 'large'] as const;
+type DockSize = (typeof DOCK_SIZES)[number];
+
+function readStoredDockSize(): DockSize {
+  try {
+    const v = localStorage.getItem(DOCK_KEY);
+    return DOCK_SIZES.includes(v as DockSize) ? (v as DockSize) : 'normal';
+  } catch {
+    return 'normal';
+  }
+}
+
+function readStoredVolume() {
+  try {
+    const v = Number(localStorage.getItem(VOLUME_KEY));
+    return Number.isFinite(v) && v > 0 && v <= 1 ? v : 0.8;
+  } catch {
+    return 0.8;
+  }
+}
+
+export function PlayerProvider({ children }: { children: ReactNode }) {
+  const toast = useToast();
+  const audioRef = useRef<HTMLAudioElement>(null as unknown as HTMLAudioElement);
+  if (!audioRef.current) audioRef.current = new Audio();
+  const hlsRef = useRef<Hls | null>(null);
+  const loadId = useRef(0);
+  const ytRef = useRef<YTPlayer | null>(null);
+  const ytPromise = useRef<Promise<YTPlayer> | null>(null);
+  const ytMountRef = useRef<HTMLDivElement>(null);
+  const engineRef = useRef<Engine>('audio');
+  const [engine, setEngineState] = useState<Engine>('audio');
+  const [dockSize, setDockSizeState] = useState<DockSize>(readStoredDockSize);
+  const [videoHidden, setVideoHidden] = useState(readStoredVideoHidden);
+
+  const [queue, setQueue] = useState<Track[]>([]);
+  const [index, setIndex] = useState(-1);
+  const [playing, setPlaying] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [volume, setVolumeState] = useState(readStoredVolume);
+  const [muted, setMuted] = useState(false);
+  const [quality, setQuality] = useState<string | null>(null);
+  const [progress, setProgress] = useState<Progress>({ currentTime: 0, duration: 0, buffered: 0 });
+
+  const current = queue[index] ?? null;
+
+  // Valeurs courantes lues par les callbacks du lecteur YouTube, créés une seule fois.
+  const volumeRef = useRef(volume);
+  volumeRef.current = volume;
+  const mutedRef = useRef(muted);
+  mutedRef.current = muted;
+  const toastRef = useRef(toast);
+  toastRef.current = toast;
+  const nextRef = useRef<() => void>(() => undefined);
+
+  const isYouTube = () => engineRef.current === 'youtube';
+  const setEngine = useCallback((e: Engine) => {
+    engineRef.current = e;
+    setEngineState(e);
+  }, []);
+
+  const stopAudio = useCallback(() => {
+    hlsRef.current?.destroy();
+    hlsRef.current = null;
+    const audio = audioRef.current;
+    audio.pause();
+    audio.removeAttribute('src');
+    audio.load();
+  }, []);
+
+  /** Crée le lecteur YouTube à la première lecture d'un titre YouTube, puis le réutilise. */
+  const getYouTubePlayer = useCallback(() => {
+    ytPromise.current ??= loadYouTubeApi()
+      .then(
+        (YT) =>
+          new Promise<YTPlayer>((resolve) => {
+            // Le lecteur remplace l'élément fourni par une iframe : on lui confie un nœud que React ne gère pas.
+            const host = document.createElement('div');
+            ytMountRef.current!.appendChild(host);
+            new YT.Player(host, {
+              width: '100%',
+              height: '100%',
+              playerVars: { autoplay: 1, playsinline: 1, rel: 0, origin: window.location.origin },
+              events: {
+                onReady: ({ target }) => {
+                  target.setVolume(Math.round(volumeRef.current * 100));
+                  if (mutedRef.current) target.mute();
+                  ytRef.current = target;
+                  resolve(target);
+                },
+                onStateChange: ({ data }) => {
+                  if (engineRef.current !== 'youtube') return;
+                  if (data === YT_STATE.PLAYING) {
+                    setPlaying(true);
+                    setLoading(false);
+                  } else if (data === YT_STATE.PAUSED || data === YT_STATE.CUED) {
+                    setPlaying(false);
+                    setLoading(false);
+                  } else if (data === YT_STATE.BUFFERING) {
+                    setLoading(true);
+                  } else if (data === YT_STATE.ENDED) {
+                    setPlaying(false);
+                    nextRef.current();
+                  }
+                },
+                onError: ({ data }) => {
+                  if (engineRef.current !== 'youtube') return;
+                  setPlaying(false);
+                  setLoading(false);
+                  if (YT_UNPLAYABLE.has(data)) {
+                    toastRef.current('Cette vidéo ne peut pas être lue dans Velora');
+                    nextRef.current();
+                  } else {
+                    toastRef.current('Lecture YouTube impossible');
+                  }
+                },
+              },
+            });
+          }),
+      )
+      .catch((err: unknown) => {
+        ytPromise.current = null;
+        throw err;
+      });
+    return ytPromise.current;
+  }, []);
+
+  /** Récupère une URL de flux signée auprès de l'API et branche le flux HLS sur l'élément audio. */
+  const load = useCallback(
+    async (track: Track) => {
+      const audio = audioRef.current;
+      const id = ++loadId.current;
+      setLoading(true);
+      setProgress({ currentTime: 0, duration: track.durationMs / 1000, buffered: 0 });
+      try {
+        const { streamUrl, format, videoId } = await api.play(track.id);
+        if (id !== loadId.current) return; // Un autre titre a été lancé entre-temps.
+
+        if (format === 'youtube' && videoId) {
+          stopAudio();
+          setEngine('youtube');
+          setQuality('YouTube');
+          const player = await getYouTubePlayer();
+          if (id !== loadId.current) return;
+          player.loadVideoById(videoId); // L'état (lecture, chargement, fin) arrive ensuite par onStateChange.
+          return;
+        }
+
+        ytRef.current?.stopVideo();
+        setEngine('audio');
+        hlsRef.current?.destroy();
+        hlsRef.current = null;
+        if (format === 'mp3') {
+          // Titre d'un catalogue externe (Jamendo) : fichier MP3 lu directement.
+          audio.src = streamUrl;
+          setQuality('MP3');
+        } else if (Hls.isSupported()) {
+          const hls = new Hls({ maxBufferLength: 30 });
+          hls.on(Hls.Events.LEVEL_SWITCHED, (_e, data) => {
+            const level = hls.levels[data.level];
+            setQuality(level ? `${Math.round(level.bitrate / 1000)} kbit/s` : null);
+          });
+          hls.on(Hls.Events.ERROR, (_e, data) => {
+            if (!data.fatal) return;
+            if (data.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad();
+            else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
+            else toast('Lecture impossible pour ce titre');
+          });
+          hls.loadSource(streamUrl);
+          hls.attachMedia(audio);
+          hlsRef.current = hls;
+        } else if (audio.canPlayType('application/vnd.apple.mpegurl')) {
+          // Safari / iOS : lecteur HLS natif.
+          audio.src = streamUrl;
+          setQuality(null);
+        } else {
+          throw new Error('HLS non supporté par ce navigateur');
+        }
+        await audio.play();
+      } catch (err) {
+        if (id !== loadId.current) return;
+        setPlaying(false);
+        setLoading(false);
+        if (err instanceof DOMException && err.name === 'NotAllowedError') return; // autoplay bloqué
+        toast(err instanceof ApiError || err instanceof Error ? err.message : 'Lecture impossible');
+      } finally {
+        if (id === loadId.current && engineRef.current === 'audio') setLoading(false);
+      }
+    },
+    [toast, stopAudio, setEngine, getYouTubePlayer],
+  );
+
+  const playAt = useCallback(
+    (tracks: Track[], i: number) => {
+      const track = tracks[i];
+      if (!track) return;
+      setQueue(tracks);
+      setIndex(i);
+      void load(track);
+    },
+    [load],
+  );
+
+  const playQueue = useCallback((tracks: Track[], startIndex = 0) => playAt(tracks, startIndex), [playAt]);
+
+  // Commandes communes aux deux moteurs de lecture.
+  const currentTime = useCallback(() => (isYouTube() ? ytRef.current?.getCurrentTime() ?? 0 : audioRef.current.currentTime), []);
+  const pause = useCallback(() => (isYouTube() ? ytRef.current?.pauseVideo() : audioRef.current.pause()), []);
+  const resume = useCallback(() => {
+    if (isYouTube()) ytRef.current?.playVideo();
+    else void audioRef.current.play().catch(() => undefined);
+  }, []);
+  const seek = useCallback((seconds: number) => {
+    if (!Number.isFinite(seconds)) return;
+    const target = Math.max(0, seconds);
+    if (isYouTube()) {
+      ytRef.current?.seekTo(target, true);
+      setProgress((p) => ({ ...p, currentTime: target }));
+    } else {
+      audioRef.current.currentTime = target;
+    }
+  }, []);
+
+  const next = useCallback(() => {
+    if (index + 1 < queue.length) playAt(queue, index + 1);
+    else {
+      pause();
+      seek(0);
+    }
+  }, [index, queue, playAt, pause, seek]);
+  nextRef.current = next;
+
+  const prev = useCallback(() => {
+    // Comme sur la plupart des lecteurs : on revient au début si le titre a commencé depuis plus de 3 s.
+    if (currentTime() > 3 || index <= 0) seek(0);
+    else playAt(queue, index - 1);
+  }, [index, queue, playAt, currentTime, seek]);
+
+  const toggle = useCallback(() => {
+    if (!current) return;
+    const state = ytRef.current?.getPlayerState();
+    const paused = isYouTube() ? state !== YT_STATE.PLAYING && state !== YT_STATE.BUFFERING : audioRef.current.paused;
+    if (paused) resume();
+    else pause();
+  }, [current, pause, resume]);
+
+  const setVolume = useCallback((v: number) => {
+    const clamped = Math.min(1, Math.max(0, v));
+    setVolumeState(clamped);
+    setMuted(clamped === 0);
+    try {
+      localStorage.setItem(VOLUME_KEY, String(clamped || 0.8));
+    } catch {
+      /* stockage indisponible : on ignore */
+    }
+  }, []);
+
+  const toggleMute = useCallback(() => setMuted((m) => !m), []);
+
+  const toggleVideo = useCallback(() => {
+    setVideoHidden((hidden) => {
+      try {
+        localStorage.setItem(VIDEO_HIDDEN_KEY, String(!hidden));
+      } catch {
+        /* stockage indisponible : on ignore */
+      }
+      return !hidden;
+    });
+  }, []);
+
+  const resizeDock = useCallback((step: -1 | 1) => {
+    setDockSizeState((size) => {
+      const nextSize = DOCK_SIZES[Math.min(DOCK_SIZES.length - 1, Math.max(0, DOCK_SIZES.indexOf(size) + step))]!;
+      try {
+        localStorage.setItem(DOCK_KEY, nextSize);
+      } catch {
+        /* stockage indisponible : on ignore */
+      }
+      return nextSize;
+    });
+  }, []);
+
+  // Synchronisation volume → élément audio et lecteur YouTube.
+  useEffect(() => {
+    audioRef.current.volume = volume;
+    audioRef.current.muted = muted;
+    const yt = ytRef.current;
+    if (yt) {
+      yt.setVolume(Math.round(volume * 100));
+      if (muted) yt.mute();
+      else yt.unMute();
+    }
+  }, [volume, muted]);
+
+  // Le lecteur YouTube n'émet pas d'événement de progression : on l'interroge pendant qu'il est actif.
+  useEffect(() => {
+    if (engine !== 'youtube') return;
+    const timer = setInterval(() => {
+      const yt = ytRef.current;
+      if (!yt) return;
+      const duration = yt.getDuration() || 0;
+      setProgress((p) => ({
+        currentTime: yt.getCurrentTime() || 0,
+        duration: duration > 0 ? duration : p.duration,
+        buffered: (yt.getVideoLoadedFraction() || 0) * duration,
+      }));
+    }, 250);
+    return () => clearInterval(timer);
+  }, [engine]);
+
+  // Événements de l'élément audio (ignorés pendant une lecture YouTube).
+  useEffect(() => {
+    const audio = audioRef.current;
+    const ifAudio = (handler: () => void) => () => {
+      if (engineRef.current === 'audio') handler();
+    };
+    const onTime = ifAudio(() => {
+      const end = audio.buffered.length ? audio.buffered.end(audio.buffered.length - 1) : 0;
+      setProgress((p) => ({
+        currentTime: audio.currentTime,
+        duration: Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : p.duration,
+        buffered: end,
+      }));
+    });
+    const onPlay = ifAudio(() => setPlaying(true));
+    const onPause = ifAudio(() => setPlaying(false));
+    const onEnded = ifAudio(() => nextRef.current());
+    const onWaiting = ifAudio(() => setLoading(true));
+    const onPlaying = ifAudio(() => setLoading(false));
+    audio.addEventListener('timeupdate', onTime);
+    audio.addEventListener('durationchange', onTime);
+    audio.addEventListener('progress', onTime);
+    audio.addEventListener('play', onPlay);
+    audio.addEventListener('pause', onPause);
+    audio.addEventListener('ended', onEnded);
+    audio.addEventListener('waiting', onWaiting);
+    audio.addEventListener('playing', onPlaying);
+    return () => {
+      audio.removeEventListener('timeupdate', onTime);
+      audio.removeEventListener('durationchange', onTime);
+      audio.removeEventListener('progress', onTime);
+      audio.removeEventListener('play', onPlay);
+      audio.removeEventListener('pause', onPause);
+      audio.removeEventListener('ended', onEnded);
+      audio.removeEventListener('waiting', onWaiting);
+      audio.removeEventListener('playing', onPlaying);
+    };
+  }, []);
+
+  // Media Session API : contrôles depuis l'écran verrouillé, les touches multimédia et le centre de contrôle
+  // de l'OS — la lecture continue en arrière-plan.
+  useEffect(() => {
+    if (!('mediaSession' in navigator) || !current) return;
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: current.title,
+      artist: current.artist.name,
+      album: current.album.title,
+      artwork: current.album.coverUrl ? [{ src: current.album.coverUrl, sizes: '640x640', type: 'image/jpeg' }] : [],
+    });
+    const handlers: [MediaSessionAction, MediaSessionActionHandler][] = [
+      ['play', resume],
+      ['pause', pause],
+      ['previoustrack', prev],
+      ['nexttrack', next],
+      ['seekto', (d) => d.seekTime !== undefined && seek(d.seekTime)],
+    ];
+    for (const [action, handler] of handlers) {
+      try {
+        navigator.mediaSession.setActionHandler(action, handler);
+      } catch {
+        /* action non supportée */
+      }
+    }
+  }, [current, next, prev, seek, pause, resume]);
+
+  useEffect(() => {
+    if ('mediaSession' in navigator) navigator.mediaSession.playbackState = playing ? 'playing' : 'paused';
+  }, [playing]);
+
+  // Raccourci clavier : espace = lecture/pause (hors champs de saisie).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (e.code !== 'Space' || ['INPUT', 'TEXTAREA', 'BUTTON'].includes(target.tagName) || target.isContentEditable) return;
+      e.preventDefault();
+      toggle();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [toggle]);
+
+  useEffect(
+    () => () => {
+      hlsRef.current?.destroy();
+      ytRef.current?.destroy();
+      ytRef.current = null;
+      ytPromise.current = null;
+    },
+    [],
+  );
+
+  const value = useMemo<PlayerState>(
+    () => ({
+      queue, index, current, playing, loading, volume, muted, quality, videoHidden,
+      playQueue, toggle, next, prev, seek, setVolume, toggleMute, toggleVideo,
+    }),
+    [queue, index, current, playing, loading, volume, muted, quality, videoHidden, playQueue, toggle, next, prev, seek, setVolume, toggleMute, toggleVideo],
+  );
+
+  return (
+    <PlayerContext.Provider value={value}>
+      <ProgressContext.Provider value={progress}>
+        {children}
+        {/* Lecteur YouTube intégré. Masquer la vidéo (option par défaut) garde l'iframe active pour le son ;
+            les conditions de l'API YouTube demandent un lecteur visible : à réévaluer avant une mise en ligne publique. */}
+        <div className={`yt-dock yt-dock--${dockSize} ${engine === 'youtube' && current ? 'yt-dock--visible' : ''} ${videoHidden ? 'yt-dock--hidden' : ''}`}
+          aria-hidden={engine !== 'youtube' || videoHidden}>
+          <div className="yt-dock__bar">
+            <span className="yt-dock__label">YouTube</span>
+            <button className="icon-btn" onClick={toggleVideo} aria-label="Masquer la vidéo">
+              <EyeOffIcon size={16} />
+            </button>
+            <button className="icon-btn" onClick={() => resizeDock(-1)} disabled={dockSize === 'compact'} aria-label="Réduire la vidéo">
+              <MinimizeIcon size={16} />
+            </button>
+            <button className="icon-btn" onClick={() => resizeDock(1)} disabled={dockSize === 'large'} aria-label="Agrandir la vidéo">
+              <MaximizeIcon size={16} />
+            </button>
+          </div>
+          <div ref={ytMountRef} className="yt-dock__frame" />
+        </div>
+      </ProgressContext.Provider>
+    </PlayerContext.Provider>
+  );
+}
+
+export function usePlayer() {
+  const ctx = useContext(PlayerContext);
+  if (!ctx) throw new Error('usePlayer doit être utilisé dans <PlayerProvider>');
+  return ctx;
+}
+
+export const useProgress = () => useContext(ProgressContext);

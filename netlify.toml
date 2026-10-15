@@ -1,0 +1,24 @@
+# Déploiement du site (apps/web) sur Netlify depuis le dépôt.
+# À définir dans Netlify → Site configuration → Environment variables :
+#   VITE_API_URL                adresse publique de l'API Velora (ex. https://velora-api.onrender.com)
+#   VITE_DESKTOP_DOWNLOAD_URL   (optionnel) lien de l'installateur Windows, ex. une release GitHub
+[build]
+  command = "npm run build -w apps/web"
+  publish = "apps/web/dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+  # L'appli Windows (apps/desktop) n'est pas construite ici : inutile de télécharger Electron (~100 Mo).
+  ELECTRON_SKIP_BINARY_DOWNLOAD = "1"
+
+# Fichiers de build aux noms hachés : cache navigateur d'un an.
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# Le service worker doit toujours être revalidé pour que les mises à jour arrivent.
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"

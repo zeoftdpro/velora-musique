@@ -1,0 +1,172 @@
+const CONFIGURED_API_URL = import.meta.env.VITE_API_URL as string | undefined;
+const isLocalPage = ['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname);
+
+// Par défaut, même hôte que la page (localhost ou 127.0.0.1) : le cookie de session reste « same-site ».
+export const API_URL = CONFIGURED_API_URL ?? `${window.location.protocol}//${window.location.hostname}:4000`;
+
+/**
+ * En ligne (Netlify…), l'adresse de l'API doit être fournie au build via VITE_API_URL : sans elle, le site
+ * appellerait « ton-site:4000 », qui n'existe pas, et resterait bloqué jusqu'à l'expiration du navigateur.
+ */
+export const API_CONFIGURED = Boolean(CONFIGURED_API_URL) || isLocalPage;
+// Large : un serveur gratuit en veille (Render) met jusqu'à une minute à se réveiller.
+const REQUEST_TIMEOUT_MS = 60_000;
+
+// ---------------------------------------------------------------------------
+// Types renvoyés par l'API
+// ---------------------------------------------------------------------------
+
+export type User = { id: string; email: string; displayName: string };
+export type Genre = { id: number; name: string; slug: string; trackCount: number };
+export type ArtistRef = { id: string; name: string };
+export type Track = {
+  id: string;
+  title: string;
+  durationMs: number;
+  trackNumber: number | null;
+  artist: ArtistRef;
+  album: { id: string; title: string; coverUrl: string | null };
+  genre: { name: string; slug: string } | null;
+  source: 'local' | 'jamendo' | 'youtube';
+};
+export type Album = {
+  id: string;
+  title: string;
+  releaseYear: number | null;
+  coverUrl: string | null;
+  artist: ArtistRef;
+  genre: { name: string; slug: string } | null;
+};
+export type AlbumDetail = Album & { tracks: Track[] };
+export type Artist = { id: string; name: string; bio: string | null; imageUrl: string | null };
+export type ArtistDetail = Artist & { albums: Album[]; topTracks: Track[] };
+export type PlaylistSummary = { id: string; name: string; description: string | null; isPublic: boolean; trackCount: number };
+export type PlaylistDetail = PlaylistSummary & { isOwner: boolean; tracks: (Track & { itemId: string })[] };
+export type SearchResults = { tracks: Track[]; albums: Album[]; artists: Artist[] };
+export type WebSearchResults = { status: 'ok' | 'disabled' | 'quota' | 'error'; tracks: Track[] };
+export type Session = { user: User; accessToken: string; expiresIn: number };
+
+// ---------------------------------------------------------------------------
+// Client HTTP : jeton d'accès en mémoire, rafraîchissement automatique via cookie httpOnly
+// ---------------------------------------------------------------------------
+
+export class ApiError extends Error {
+  constructor(public status: number, message: string) {
+    super(message);
+  }
+}
+
+let accessToken: string | null = null;
+let onSessionLost: (() => void) | null = null;
+let refreshing: Promise<Session | null> | null = null;
+
+export function setAccessToken(token: string | null) {
+  accessToken = token;
+}
+export function onUnauthorized(handler: () => void) {
+  onSessionLost = handler;
+}
+
+async function raw<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const headers = new Headers(init.headers);
+  if (init.body && !headers.has('content-type')) headers.set('content-type', 'application/json');
+  if (accessToken) headers.set('authorization', `Bearer ${accessToken}`);
+  if (!API_CONFIGURED) {
+    throw new ApiError(0, 'Ce site n’est relié à aucun serveur Velora (variable VITE_API_URL manquante).');
+  }
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS), ...init, headers, credentials: 'include' });
+  } catch {
+    // Erreur réseau, CORS ou délai dépassé : le navigateur ne donne que « Failed to fetch ».
+    throw new ApiError(0, isLocalPage
+      ? 'Impossible de joindre le serveur Velora. Vérifiez que l’API est lancée (npm run dev).'
+      : 'Le serveur Velora ne répond pas. Réessayez dans un instant.');
+  }
+  if (res.status === 204) return undefined as T;
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new ApiError(res.status, data.message ?? `Erreur ${res.status}`);
+  return data as T;
+}
+
+/** Rafraîchit la session (un seul appel concurrent). Renvoie null si la session a expiré. */
+export function refreshSession(): Promise<Session | null> {
+  refreshing ??= raw<Session>('/auth/refresh', { method: 'POST' })
+    .then((s) => {
+      setAccessToken(s.accessToken);
+      return s;
+    })
+    .catch(() => null)
+    .finally(() => (refreshing = null));
+  return refreshing;
+}
+
+export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  try {
+    return await raw<T>(path, init);
+  } catch (err) {
+    if (!(err instanceof ApiError) || err.status !== 401 || path.startsWith('/auth/')) throw err;
+    const session = await refreshSession();
+    if (!session) {
+      onSessionLost?.();
+      throw err;
+    }
+    return raw<T>(path, init);
+  }
+}
+
+const json = (body: unknown) => JSON.stringify(body);
+
+export const api = {
+  register: (body: { email: string; password: string; displayName: string }) =>
+    raw<Session>('/auth/register', { method: 'POST', body: json(body) }),
+  login: (body: { email: string; password: string }) => raw<Session>('/auth/login', { method: 'POST', body: json(body) }),
+  logout: () => raw<void>('/auth/logout', { method: 'POST' }),
+
+  me: () => request<User>('/me'),
+  updateMe: (body: { displayName: string }) => request<User>('/me', { method: 'PATCH', body: json(body) }),
+
+  genres: () => request<Genre[]>('/genres'),
+  albums: (params: { genre?: string; limit?: number; source?: 'local' | 'all' } = {}) => request<Album[]>(`/albums?${new URLSearchParams(clean(params))}`),
+  album: (id: string) => request<AlbumDetail>(`/albums/${id}`),
+  artists: (source: 'local' | 'all' = 'all') => request<Artist[]>(`/artists?limit=50&source=${source}`),
+  artist: (id: string) => request<ArtistDetail>(`/artists/${id}`),
+  tracks: (params: { genre?: string; limit?: number } = {}) => request<Track[]>(`/tracks?${new URLSearchParams(clean(params))}`),
+  search: (q: string, genre?: string) => request<SearchResults>(`/search?${new URLSearchParams(clean({ q, genre }))}`),
+  searchWeb: (q: string) => request<WebSearchResults>(`/search/web?${new URLSearchParams({ q })}`),
+
+  play: (trackId: string) =>
+    request<{ streamUrl: string; format: 'hls' | 'mp3' | 'youtube'; videoId?: string; qualities: string[]; expiresIn: number }>(`/tracks/${trackId}/play`, { method: 'POST' }),
+
+  favorites: () => request<Track[]>('/me/favorites?limit=100'),
+  favoriteIds: () => request<string[]>('/me/favorites/ids'),
+  addFavorite: (trackId: string) => request<void>(`/me/favorites/${trackId}`, { method: 'PUT' }),
+  removeFavorite: (trackId: string) => request<void>(`/me/favorites/${trackId}`, { method: 'DELETE' }),
+  history: () => request<Track[]>('/me/history?limit=20'),
+
+  playlists: () => request<PlaylistSummary[]>('/playlists'),
+  playlist: (id: string) => request<PlaylistDetail>(`/playlists/${id}`),
+  createPlaylist: (body: { name: string; description?: string }) =>
+    request<PlaylistSummary>('/playlists', { method: 'POST', body: json(body) }),
+  updatePlaylist: (id: string, body: Partial<{ name: string; description: string | null; isPublic: boolean }>) =>
+    request<PlaylistSummary>(`/playlists/${id}`, { method: 'PATCH', body: json(body) }),
+  deletePlaylist: (id: string) => request<void>(`/playlists/${id}`, { method: 'DELETE' }),
+  addToPlaylist: (id: string, trackId: string) =>
+    request<void>(`/playlists/${id}/tracks`, { method: 'POST', body: json({ trackId }) }),
+  removeFromPlaylist: (id: string, itemId: string) => request<void>(`/playlists/${id}/tracks/${itemId}`, { method: 'DELETE' }),
+  movePlaylistItem: (id: string, itemId: string, position: number) =>
+    request<void>(`/playlists/${id}/tracks/${itemId}`, { method: 'PATCH', body: json({ position }) }),
+};
+
+function clean(params: Record<string, string | number | undefined>) {
+  return Object.fromEntries(
+    Object.entries(params)
+      .filter(([, v]) => v !== undefined && v !== '')
+      .map(([k, v]) => [k, String(v)]),
+  );
+}
+
+export function formatDuration(ms: number) {
+  const total = Math.max(0, Math.round(ms / 1000));
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+}

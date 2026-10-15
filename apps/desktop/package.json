@@ -1,0 +1,39 @@
+{
+  "name": "@velora/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Velora pour Windows : l'application web dans une fenêtre dédiée, avec installateur .exe",
+  "author": "Velora",
+  "main": "main.cjs",
+  "veloraAppUrl": "http://localhost:5173",
+  "scripts": {
+    "start": "electron .",
+    "dist": "node scripts/dist.cjs"
+  },
+  "devDependencies": {
+    "electron": "43.7.7",
+    "electron-builder": "26.17.0"
+  },
+  "build": {
+    "appId": "app.velora.desktop",
+    "productName": "Velora",
+    "electronVersion": "43.7.7",
+    "npmRebuild": false,
+    "files": ["main.cjs", "preload.cjs", "offline.html", "build/icon.png", "package.json"],
+    "directories": { "output": "release", "buildResources": "build" },
+    "win": {
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "runAfterFinish": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Velora",
+      "uninstallDisplayName": "Velora",
+      "artifactName": "Velora-Setup-${version}.${ext}"
+    }
+  }
+}

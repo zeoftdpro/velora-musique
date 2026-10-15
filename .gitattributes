@@ -1,0 +1,4 @@
+# Fins de ligne Unix dans le dépôt (déploiement sur Linux : Render, Netlify).
+* text=auto eol=lf
+*.png binary
+*.ico binary
