@@ -2,7 +2,10 @@ import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/auth';
 import { useLibrary } from '../context/library';
 import { useToast } from '../context/toast';
+import { usePlayer } from '../context/player';
+import { PANEL_MEDIA, useMediaQuery } from '../hooks';
 import { useInstall } from '../pwa';
+import { NowPlayingPanel } from './NowPlaying';
 import { PlayerBar } from './PlayerBar';
 import { DownloadIcon, HeartIcon, HomeIcon, LibraryIcon, LogoMark, PlusIcon, SearchIcon, UserIcon } from './icons';
 
@@ -12,6 +15,9 @@ export function Layout() {
   const navigate = useNavigate();
   const toast = useToast();
   const install = useInstall();
+  const { panelOpen } = usePlayer();
+  const wide = useMediaQuery(PANEL_MEDIA);
+  const showPanel = panelOpen && wide;
 
   const newPlaylist = async () => {
     try {
@@ -23,7 +29,7 @@ export function Layout() {
   };
 
   return (
-    <div className="app">
+    <div className={`app ${showPanel ? 'app--panel' : ''}`}>
       <aside className="sidebar">
         <Link to="/" className="brand"><LogoMark /> <span>Velora</span></Link>
         <nav className="nav">
@@ -65,6 +71,7 @@ export function Layout() {
         <Outlet />
       </main>
 
+      {showPanel && <NowPlayingPanel />}
       <PlayerBar />
     </div>
   );

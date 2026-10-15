@@ -11,6 +11,8 @@ export const API_URL = CONFIGURED_API_URL ?? `${window.location.protocol}//${win
 export const API_CONFIGURED = Boolean(CONFIGURED_API_URL) || isLocalPage;
 // Large : un serveur gratuit en veille (Render) met jusqu'à une minute à se réveiller.
 const REQUEST_TIMEOUT_MS = 60_000;
+const MAX_RETRIES = 4; // 2 + 4 + 8 + 16 s : couvre le réveil d'un serveur Render gratuit (~50 s)
+const RETRY_STATUSES = new Set([502, 503, 504]);
 
 // ---------------------------------------------------------------------------
 // Types renvoyés par l'API
@@ -74,10 +76,22 @@ async function raw<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (!API_CONFIGURED) {
     throw new ApiError(0, 'Ce site n’est relié à aucun serveur Velora (variable VITE_API_URL manquante).');
   }
-  let res: Response;
-  try {
-    res = await fetch(`${API_URL}${path}`, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS), ...init, headers, credentials: 'include' });
-  } catch {
+  // Serveur gratuit en veille (Render) : le relais Netlify abandonne (502/504) avant la fin du réveil.
+  // Les requêtes sans effet de bord en cas de doublon sont donc réessayées, avec une attente croissante.
+  const retryable = ['GET', 'HEAD', 'PUT', 'DELETE'].includes((init.method ?? 'GET').toUpperCase());
+  let res: Response | null = null;
+  for (let attempt = 0; ; attempt++) {
+    const canRetry = retryable && attempt < MAX_RETRIES;
+    try {
+      res = await fetch(`${API_URL}${path}`, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS), ...init, headers, credentials: 'include' });
+    } catch {
+      res = null;
+    }
+    if (res && !RETRY_STATUSES.has(res.status)) break;
+    if (!canRetry) break;
+    await new Promise((resolve) => setTimeout(resolve, 2000 * 2 ** attempt));
+  }
+  if (!res) {
     // Erreur réseau, CORS ou délai dépassé : le navigateur ne donne que « Failed to fetch ».
     throw new ApiError(0, isLocalPage
       ? 'Impossible de joindre le serveur Velora. Vérifiez que l’API est lancée (npm run dev).'
@@ -124,6 +138,7 @@ export const api = {
   login: (body: { email: string; password: string }) => raw<Session>('/auth/login', { method: 'POST', body: json(body) }),
   logout: () => raw<void>('/auth/logout', { method: 'POST' }),
 
+  health: () => raw<{ status: string }>('/health'),
   me: () => request<User>('/me'),
   updateMe: (body: { displayName: string }) => request<User>('/me', { method: 'PATCH', body: json(body) }),
 
@@ -170,4 +185,16 @@ function clean(params: Record<string, string | number | undefined>) {
 export function formatDuration(ms: number) {
   const total = Math.max(0, Math.round(ms / 1000));
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+}
+
+/**
+ * Garde le serveur éveillé tant que l'application est ouverte et visible : un serveur gratuit (Render)
+ * s'endort après 15 minutes sans requête, et met ensuite près d'une minute à répondre.
+ */
+export function keepServerAwake() {
+  if (isLocalPage) return () => undefined;
+  const id = setInterval(() => {
+    if (document.visibilityState === 'visible') void api.health().catch(() => undefined);
+  }, 10 * 60 * 1000);
+  return () => clearInterval(id);
 }

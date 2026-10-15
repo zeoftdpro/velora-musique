@@ -4,6 +4,7 @@ import { BigPlayButton, Hero } from '../components/Hero';
 import { HeartIcon, PlusIcon } from '../components/icons';
 import { ErrorState, Loading } from '../components/States';
 import { TrackList } from '../components/TrackList';
+import { useDialog } from '../context/dialog';
 import { useLibrary } from '../context/library';
 import { useAsync, useTitle } from '../hooks';
 import { usePlayList } from './Album';
@@ -21,11 +22,12 @@ export function LibraryPage() {
   useTitle('Bibliothèque');
   const { playlists, createPlaylist, favoriteIds } = useLibrary();
   const navigate = useNavigate();
+  const dialog = useDialog();
 
   const create = async () => {
-    const name = prompt('Nom de la playlist');
-    if (!name?.trim()) return;
-    const playlist = await createPlaylist(name.trim());
+    const name = await dialog.prompt({ title: 'Nouvelle playlist', label: 'Nom', confirmLabel: 'Créer' });
+    if (!name) return;
+    const playlist = await createPlaylist(name);
     navigate(`/playlist/${playlist.id}`);
   };
 

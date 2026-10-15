@@ -41,6 +41,17 @@ export const MaximizeIcon = (p: IconProps) => <Icon {...p}><path d="M15 3h6v6M9 
 export const DownloadIcon = (p: IconProps) => <Icon {...p}><path d="M12 4v11M7 10l5 5 5-5M5 20h14" /></Icon>;
 export const VideoIcon = (p: IconProps) => <Icon {...p}><rect x="3" y="6" width="13" height="12" rx="2" /><path d="M16 10.5l5-3v9l-5-3z" /></Icon>;
 export const EyeOffIcon = (p: IconProps) => <Icon {...p}><path d="M3 3l18 18M10.6 6.1A9.8 9.8 0 0 1 12 6c5 0 9 6 9 6a17 17 0 0 1-2.6 3.2M6.5 7.6C4.3 9.1 3 12 3 12s4 6 9 6c1.6 0 3-.4 4.3-1.1M9.9 9.9a3 3 0 0 0 4.2 4.2" /></Icon>;
+export const ListPlusIcon = (p: IconProps) => <Icon {...p}><path d="M4 6h11M4 12h11M4 18h7M18 15v6M15 18h6" /></Icon>;
+export const CloseIcon = (p: IconProps) => <Icon {...p}><path d="M6 6l12 12M18 6L6 18" /></Icon>;
+export const ShuffleIcon = (p: IconProps) => <Icon {...p}><path d="M16 4h4v4M20 4l-6.5 6.5M4 20l6-6M16 20h4v-4M20 20L4 4" /></Icon>;
+export const RepeatIcon = ({ one, ...p }: IconProps & { one?: boolean }) => (
+  <Icon {...p}>
+    <path d="M17 2l3 3-3 3M4 11V9a4 4 0 0 1 4-4h12M7 22l-3-3 3-3M20 13v2a4 4 0 0 1-4 4H4" />
+    {one && <text x="12" y="14.5" textAnchor="middle" fontSize="8" fontWeight="800" fill="currentColor" stroke="none">1</text>}
+  </Icon>
+);
+export const PanelIcon = (p: IconProps) => <Icon {...p}><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M15 4v16" /></Icon>;
+export const QueueIcon = (p: IconProps) => <Icon {...p}><path d="M4 6h16M4 12h16M4 18h10M18 16l3 2-3 2z" /></Icon>;
 export const MusicIcon = (p: IconProps) => <Icon {...p}><path d="M9 18V5l11-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="17" cy="16" r="3" /></Icon>;
 export const LogoMark = ({ size = 28 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true">

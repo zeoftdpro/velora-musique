@@ -30,6 +30,9 @@ export async function buildApp() {
 
   await app.register(cors, {
     origin: env.WEB_ORIGIN.split(',').map((o) => o.trim().replace(/\/+$/, '')).filter(Boolean),
+    // Par défaut, @fastify/cors n'autorise que GET, HEAD et POST : likes (PUT), suppressions (DELETE) et
+    // modifications (PATCH) échouaient alors depuis une autre origine (site local, appli Windows).
+    methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'],
     credentials: true,
   });
   await app.register(cookie);

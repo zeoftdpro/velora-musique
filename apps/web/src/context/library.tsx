@@ -8,7 +8,7 @@ type LibraryState = {
   playlists: PlaylistSummary[];
   reloadPlaylists: () => Promise<void>;
   createPlaylist: (name: string) => Promise<PlaylistSummary>;
-  addToPlaylist: (playlistId: string, trackId: string) => Promise<void>;
+  addToPlaylist: (playlistId: string, trackId: string, playlistName?: string) => Promise<void>;
 };
 
 const LibraryContext = createContext<LibraryState | null>(null);
@@ -59,10 +59,10 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
         await reloadPlaylists();
         return playlist;
       },
-      addToPlaylist: async (playlistId, trackId) => {
+      addToPlaylist: async (playlistId, trackId, playlistName) => {
         await api.addToPlaylist(playlistId, trackId);
         await reloadPlaylists();
-        toast(`Ajouté à « ${playlists.find((p) => p.id === playlistId)?.name ?? 'la playlist'} »`);
+        toast(`Ajouté à « ${playlistName ?? playlists.find((p) => p.id === playlistId)?.name ?? 'la playlist'} »`);
       },
     }),
     [favoriteIds, toggleFavorite, playlists, reloadPlaylists, toast],

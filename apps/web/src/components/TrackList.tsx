@@ -5,7 +5,8 @@ import { useLibrary } from '../context/library';
 import { usePlayer } from '../context/player';
 import { useToast } from '../context/toast';
 import { Cover } from './Cover';
-import { DownIcon, HeartIcon, MoreIcon, PauseIcon, PlayIcon, PlusIcon, TrashIcon, UpIcon } from './icons';
+import { PlaylistMenuItems } from './AddToPlaylist';
+import { DownIcon, HeartIcon, MoreIcon, NextIcon, PauseIcon, PlayIcon, QueueIcon, TrashIcon, UpIcon } from './icons';
 
 type Row = Track & { itemId?: string };
 
@@ -69,7 +70,7 @@ export function TrackList({ tracks, showAlbum = true, showCover = true, offset =
 function TrackMenu({ track, index, count, onRemove, onMove }: { track: Row; index: number; count: number } & Pick<Props, 'onRemove' | 'onMove'>) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  const { playlists, addToPlaylist, createPlaylist } = useLibrary();
+  const { playNext, addToQueue } = usePlayer();
   const toast = useToast();
 
   useEffect(() => {
@@ -100,18 +101,14 @@ function TrackMenu({ track, index, count, onRemove, onMove }: { track: Row; inde
       </button>
       {open && (
         <div className="menu__panel" role="menu">
-          <div className="menu__label">Ajouter à une playlist</div>
-          <button role="menuitem" onClick={run(async () => {
-            const name = prompt('Nom de la nouvelle playlist', track.title);
-            if (!name?.trim()) return;
-            const playlist = await createPlaylist(name.trim());
-            await addToPlaylist(playlist.id, track.id);
-          })}>
-            <PlusIcon size={16} /> Nouvelle playlist…
+          <button role="menuitem" onClick={run(() => { playNext(track); toast('Sera lu juste après'); })}>
+            <NextIcon size={16} /> Lire ensuite
           </button>
-          {playlists.map((p) => (
-            <button key={p.id} role="menuitem" onClick={run(() => addToPlaylist(p.id, track.id))}>{p.name}</button>
-          ))}
+          <button role="menuitem" onClick={run(() => { addToQueue(track); toast('Ajouté à la file d’attente'); })}>
+            <QueueIcon size={16} /> Ajouter à la file d’attente
+          </button>
+          <div className="menu__sep" />
+          <PlaylistMenuItems track={track} onDone={() => setOpen(false)} />
           {(onMove || onRemove) && <div className="menu__sep" />}
           {onMove && index > 0 && (
             <button role="menuitem" onClick={run(() => onMove(track, -1))}><UpIcon size={16} /> Monter</button>

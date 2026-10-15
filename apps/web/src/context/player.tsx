@@ -18,7 +18,21 @@ type PlayerState = {
   /** Vidéo YouTube masquée : le son continue, le mini-lecteur n'est plus affiché. */
   videoHidden: boolean;
   toggleVideo: () => void;
+  /** Lecture aléatoire : mélange les titres suivants (l'ordre d'origine est restauré à la désactivation). */
+  shuffle: boolean;
+  toggleShuffle: () => void;
+  repeat: Repeat;
+  cycleRepeat: () => void;
+  /** Panneau « En cours de lecture » (à droite, sur grand écran). */
+  panelOpen: boolean;
+  togglePanel: () => void;
+  /** Emplacement du clip YouTube dans le panneau (ref callback) ; le lecteur vient s'y superposer. */
+  registerVideoSlot: (el: HTMLElement | null) => void;
+  videoInPanel: boolean;
   playQueue: (tracks: Track[], startIndex?: number) => void;
+  playNext: (track: Track) => void;
+  addToQueue: (track: Track) => void;
+  jumpTo: (index: number) => void;
   toggle: () => void;
   next: () => void;
   prev: () => void;
@@ -31,6 +45,8 @@ type Progress = { currentTime: number; duration: number; buffered: number };
 
 /** Moteur de lecture : élément audio (HLS ou MP3) ou lecteur YouTube officiel intégré. */
 type Engine = 'audio' | 'youtube';
+export type Repeat = 'off' | 'all' | 'one';
+type SlotRect = { top: number; left: number; width: number; height: number };
 
 const PlayerContext = createContext<PlayerState | null>(null);
 // Contexte séparé pour la progression : évite de re-rendre toute l'app à chaque `timeupdate`.
@@ -39,6 +55,34 @@ const ProgressContext = createContext<Progress>({ currentTime: 0, duration: 0, b
 const VOLUME_KEY = 'velora.volume';
 const DOCK_KEY = 'velora.ytDock';
 const VIDEO_HIDDEN_KEY = 'velora.ytHidden';
+const SHUFFLE_KEY = 'velora.shuffle';
+const REPEAT_KEY = 'velora.repeat';
+const PANEL_KEY = 'velora.panel';
+
+function readStored(key: string) {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+function store(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    /* stockage indisponible : on ignore */
+  }
+}
+
+/** Mélange de Fisher-Yates (copie). */
+function shuffled<T>(items: T[]) {
+  const a = [...items];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j]!, a[i]!];
+  }
+  return a;
+}
 
 function readStoredVideoHidden() {
   try {
@@ -83,6 +127,16 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [engine, setEngineState] = useState<Engine>('audio');
   const [dockSize, setDockSizeState] = useState<DockSize>(readStoredDockSize);
   const [videoHidden, setVideoHidden] = useState(readStoredVideoHidden);
+  const [shuffle, setShuffle] = useState(() => readStored(SHUFFLE_KEY) === 'true');
+  const [repeat, setRepeat] = useState<Repeat>(() => {
+    const v = readStored(REPEAT_KEY);
+    return v === 'all' || v === 'one' ? v : 'off';
+  });
+  const [panelOpen, setPanelOpen] = useState(() => readStored(PANEL_KEY) !== 'false');
+  const [videoSlot, setVideoSlot] = useState<HTMLElement | null>(null);
+  const [slotRect, setSlotRect] = useState<SlotRect | null>(null);
+  // Ordre d'origine de la file, conservé pendant la lecture aléatoire.
+  const originalQueue = useRef<Track[] | null>(null);
 
   const [queue, setQueue] = useState<Track[]>([]);
   const [index, setIndex] = useState(-1);
@@ -103,6 +157,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const toastRef = useRef(toast);
   toastRef.current = toast;
   const nextRef = useRef<() => void>(() => undefined);
+  const endedRef = useRef<() => void>(() => undefined);
 
   const isYouTube = () => engineRef.current === 'youtube';
   const setEngine = useCallback((e: Engine) => {
@@ -151,7 +206,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
                     setLoading(true);
                   } else if (data === YT_STATE.ENDED) {
                     setPlaying(false);
-                    nextRef.current();
+                    endedRef.current();
                   }
                 },
                 onError: ({ data }) => {
@@ -252,7 +307,45 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     [load],
   );
 
-  const playQueue = useCallback((tracks: Track[], startIndex = 0) => playAt(tracks, startIndex), [playAt]);
+  const playQueue = useCallback(
+    (tracks: Track[], startIndex = 0) => {
+      const start = tracks[startIndex];
+      if (shuffle && start) {
+        originalQueue.current = tracks;
+        playAt([start, ...shuffled(tracks.filter((_, i) => i !== startIndex))], 0);
+      } else {
+        originalQueue.current = null;
+        playAt(tracks, startIndex);
+      }
+    },
+    [playAt, shuffle],
+  );
+
+  /** Insère juste après le titre en cours (en retirant un éventuel doublon plus loin dans la file). */
+  const playNext = useCallback(
+    (track: Track) => {
+      if (!current) return playQueue([track]);
+      if (track.id === current.id) return;
+      setQueue((q) => {
+        const rest = q.filter((t, i) => i > index && t.id !== track.id);
+        return [...q.slice(0, index + 1), track, ...rest];
+      });
+      if (originalQueue.current) originalQueue.current = [...originalQueue.current.filter((t) => t.id !== track.id), track];
+    },
+    [current, index, playQueue],
+  );
+
+  const addToQueue = useCallback(
+    (track: Track) => {
+      if (!current) return playQueue([track]);
+      if (track.id === current.id) return;
+      setQueue((q) => [...q.filter((t, i) => i <= index || t.id !== track.id), track]);
+      if (originalQueue.current) originalQueue.current = [...originalQueue.current.filter((t) => t.id !== track.id), track];
+    },
+    [current, index, playQueue],
+  );
+
+  const jumpTo = useCallback((i: number) => playAt(queue, i), [playAt, queue]);
 
   // Commandes communes aux deux moteurs de lecture.
   const currentTime = useCallback(() => (isYouTube() ? ytRef.current?.getCurrentTime() ?? 0 : audioRef.current.currentTime), []);
@@ -274,12 +367,52 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   const next = useCallback(() => {
     if (index + 1 < queue.length) playAt(queue, index + 1);
+    else if (repeat === 'all' && queue.length > 0) playAt(queue, 0);
     else {
       pause();
       seek(0);
     }
-  }, [index, queue, playAt, pause, seek]);
+  }, [index, queue, playAt, pause, seek, repeat]);
   nextRef.current = next;
+
+  // Fin naturelle d'un titre : « répéter le titre » le relance, sinon on passe au suivant.
+  endedRef.current = () => {
+    if (repeat === 'one') {
+      seek(0);
+      resume();
+    } else {
+      next();
+    }
+  };
+
+  const toggleShuffle = useCallback(() => {
+    const enable = !shuffle;
+    setShuffle(enable);
+    store(SHUFFLE_KEY, String(enable));
+    if (!current) return;
+    if (enable) {
+      originalQueue.current = queue;
+      setQueue([current, ...shuffled(queue.filter((_, i) => i !== index))]);
+      setIndex(0);
+    } else if (originalQueue.current) {
+      const original = originalQueue.current;
+      originalQueue.current = null;
+      setQueue(original);
+      setIndex(Math.max(0, original.findIndex((t) => t.id === current.id)));
+    }
+  }, [shuffle, current, queue, index]);
+
+  const cycleRepeat = useCallback(() => {
+    const nextMode: Repeat = repeat === 'off' ? 'all' : repeat === 'all' ? 'one' : 'off';
+    setRepeat(nextMode);
+    store(REPEAT_KEY, nextMode);
+  }, [repeat]);
+
+  const togglePanel = useCallback(() => {
+    const open = !panelOpen;
+    setPanelOpen(open);
+    store(PANEL_KEY, String(open));
+  }, [panelOpen]);
 
   const prev = useCallback(() => {
     // Comme sur la plupart des lecteurs : on revient au début si le titre a commencé depuis plus de 3 s.
@@ -343,6 +476,34 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     }
   }, [volume, muted]);
 
+  // Le clip YouTube se superpose à son emplacement dans le panneau : déplacer l'iframe dans le DOM la
+  // rechargerait et couperait la lecture, on suit donc la position de l'emplacement.
+  useEffect(() => {
+    if (!videoSlot) {
+      setSlotRect(null);
+      return;
+    }
+    let frame = 0;
+    const update = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const r = videoSlot.getBoundingClientRect();
+        setSlotRect(r.width > 0 ? { top: r.top, left: r.left, width: r.width, height: r.height } : null);
+      });
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(videoSlot);
+    window.addEventListener('resize', update);
+    window.addEventListener('scroll', update, true);
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+      window.removeEventListener('resize', update);
+      window.removeEventListener('scroll', update, true);
+    };
+  }, [videoSlot]);
+
   // Le lecteur YouTube n'émet pas d'événement de progression : on l'interroge pendant qu'il est actif.
   useEffect(() => {
     if (engine !== 'youtube') return;
@@ -375,7 +536,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     });
     const onPlay = ifAudio(() => setPlaying(true));
     const onPause = ifAudio(() => setPlaying(false));
-    const onEnded = ifAudio(() => nextRef.current());
+    const onEnded = ifAudio(() => endedRef.current());
     const onWaiting = ifAudio(() => setLoading(true));
     const onPlaying = ifAudio(() => setLoading(false));
     audio.addEventListener('timeupdate', onTime);
@@ -453,10 +614,17 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const value = useMemo<PlayerState>(
     () => ({
       queue, index, current, playing, loading, volume, muted, quality, videoHidden,
-      playQueue, toggle, next, prev, seek, setVolume, toggleMute, toggleVideo,
+      shuffle, repeat, panelOpen, videoInPanel: slotRect !== null, registerVideoSlot: setVideoSlot,
+      playQueue, playNext, addToQueue, jumpTo, toggle, next, prev, seek, setVolume, toggleMute, toggleVideo,
+      toggleShuffle, cycleRepeat, togglePanel,
     }),
-    [queue, index, current, playing, loading, volume, muted, quality, videoHidden, playQueue, toggle, next, prev, seek, setVolume, toggleMute, toggleVideo],
+    [queue, index, current, playing, loading, volume, muted, quality, videoHidden, shuffle, repeat, panelOpen, slotRect,
+      playQueue, playNext, addToQueue, jumpTo, toggle, next, prev, seek, setVolume, toggleMute, toggleVideo,
+      toggleShuffle, cycleRepeat, togglePanel],
   );
+
+  // Panneau ouvert avec un emplacement visible : le clip s'y affiche (quel que soit le réglage « vidéo masquée »).
+  const inPanel = slotRect !== null;
 
   return (
     <PlayerContext.Provider value={value}>
@@ -464,9 +632,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         {children}
         {/* Lecteur YouTube intégré. Masquer la vidéo (option par défaut) garde l'iframe active pour le son ;
             les conditions de l'API YouTube demandent un lecteur visible : à réévaluer avant une mise en ligne publique. */}
-        <div className={`yt-dock yt-dock--${dockSize} ${engine === 'youtube' && current ? 'yt-dock--visible' : ''} ${videoHidden ? 'yt-dock--hidden' : ''}`}
-          aria-hidden={engine !== 'youtube' || videoHidden}>
-          <div className="yt-dock__bar">
+        <div
+          className={`yt-dock ${inPanel ? 'yt-dock--panel' : `yt-dock--${dockSize}`} ${engine === 'youtube' && current ? 'yt-dock--visible' : ''} ${!inPanel && videoHidden ? 'yt-dock--hidden' : ''}`}
+          style={inPanel && slotRect ? { top: slotRect.top, left: slotRect.left, width: slotRect.width, height: slotRect.height } : undefined}
+          aria-hidden={engine !== 'youtube' || (!inPanel && videoHidden)}>
+          {!inPanel && <div className="yt-dock__bar">
             <span className="yt-dock__label">YouTube</span>
             <button className="icon-btn" onClick={toggleVideo} aria-label="Masquer la vidéo">
               <EyeOffIcon size={16} />
@@ -477,7 +647,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
             <button className="icon-btn" onClick={() => resizeDock(1)} disabled={dockSize === 'large'} aria-label="Agrandir la vidéo">
               <MaximizeIcon size={16} />
             </button>
-          </div>
+          </div>}
           <div ref={ytMountRef} className="yt-dock__frame" />
         </div>
       </ProgressContext.Provider>

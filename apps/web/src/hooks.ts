@@ -135,3 +135,19 @@ export function useRecentSearches() {
   const clear = useCallback(() => persist([]), []);
   return { items, add, remove, clear };
 }
+
+/** Largeur à partir de laquelle le panneau « En cours de lecture » s'affiche à droite. */
+export const PANEL_MEDIA = '(min-width: 1100px)';
+
+/** Suit une media query CSS (ex. « (min-width: 1100px) »). */
+export function useMediaQuery(query: string) {
+  const [matches, setMatches] = useState(() => window.matchMedia(query).matches);
+  useEffect(() => {
+    const mql = window.matchMedia(query);
+    const onChange = () => setMatches(mql.matches);
+    onChange();
+    mql.addEventListener('change', onChange);
+    return () => mql.removeEventListener('change', onChange);
+  }, [query]);
+  return matches;
+}

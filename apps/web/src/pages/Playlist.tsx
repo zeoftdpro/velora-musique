@@ -6,6 +6,7 @@ import { BigPlayButton, Hero } from '../components/Hero';
 import { TrashIcon } from '../components/icons';
 import { ErrorState, Loading } from '../components/States';
 import { TrackList } from '../components/TrackList';
+import { useDialog } from '../context/dialog';
 import { useLibrary } from '../context/library';
 import { useToast } from '../context/toast';
 import { useAsync, useTitle } from '../hooks';
@@ -15,6 +16,7 @@ export function PlaylistPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
+  const dialog = useDialog();
   const { reloadPlaylists } = useLibrary();
   const { data: playlist, error, loading, reload } = useAsync(() => api.playlist(id!), [id]);
   const [editing, setEditing] = useState(false);
@@ -39,7 +41,13 @@ export function PlaylistPage() {
   };
 
   const remove = async () => {
-    if (!confirm(`Supprimer la playlist « ${playlist.name} » ?`)) return;
+    const ok = await dialog.confirm({
+      title: 'Supprimer la playlist ?',
+      message: `« ${playlist.name} » sera supprimée définitivement.`,
+      confirmLabel: 'Supprimer',
+      danger: true,
+    });
+    if (!ok) return;
     await api.deletePlaylist(playlist.id);
     await reloadPlaylists();
     toast('Playlist supprimée');

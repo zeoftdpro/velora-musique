@@ -4,6 +4,7 @@ import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-route
 import { Layout } from './components/Layout';
 import { BootScreen } from './components/States';
 import { AuthProvider, useAuth } from './context/auth';
+import { DialogProvider } from './context/dialog';
 import { LibraryProvider } from './context/library';
 import { PlayerProvider } from './context/player';
 import { ToastProvider } from './context/toast';
@@ -45,23 +46,25 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
       <ToastProvider>
-        <AuthProvider>
-          <Routes>
-            <Route path="/login" element={<GuestOnly><AuthPage mode="login" /></GuestOnly>} />
-            <Route path="/register" element={<GuestOnly><AuthPage mode="register" /></GuestOnly>} />
-            <Route element={<Protected />}>
-              <Route index element={<HomePage />} />
-              <Route path="search" element={<SearchPage />} />
-              <Route path="library" element={<LibraryPage />} />
-              <Route path="library/liked" element={<LikedPage />} />
-              <Route path="album/:id" element={<AlbumPage />} />
-              <Route path="artist/:id" element={<ArtistPage />} />
-              <Route path="playlist/:id" element={<PlaylistPage />} />
-              <Route path="account" element={<AccountPage />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Route>
-          </Routes>
-        </AuthProvider>
+        <DialogProvider>
+          <AuthProvider>
+            <Routes>
+              <Route path="/login" element={<GuestOnly><AuthPage mode="login" /></GuestOnly>} />
+              <Route path="/register" element={<GuestOnly><AuthPage mode="register" /></GuestOnly>} />
+              <Route element={<Protected />}>
+                <Route index element={<HomePage />} />
+                <Route path="search" element={<SearchPage />} />
+                <Route path="library" element={<LibraryPage />} />
+                <Route path="library/liked" element={<LikedPage />} />
+                <Route path="album/:id" element={<AlbumPage />} />
+                <Route path="artist/:id" element={<ArtistPage />} />
+                <Route path="playlist/:id" element={<PlaylistPage />} />
+                <Route path="account" element={<AccountPage />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Route>
+            </Routes>
+          </AuthProvider>
+        </DialogProvider>
       </ToastProvider>
     </BrowserRouter>
   </StrictMode>,

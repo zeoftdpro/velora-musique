@@ -4,11 +4,18 @@ import { formatDuration } from '../api';
 import { useLibrary } from '../context/library';
 import { usePlayer, useProgress } from '../context/player';
 import { Cover } from './Cover';
-import { HeartIcon, NextIcon, PauseIcon, PlayIcon, PrevIcon, VideoIcon, VolumeIcon } from './icons';
+import { PANEL_MEDIA, useMediaQuery } from '../hooks';
+import { AddToPlaylistButton } from './AddToPlaylist';
+import { HeartIcon, NextIcon, PanelIcon, PauseIcon, PlayIcon, PrevIcon, RepeatIcon, ShuffleIcon, VideoIcon, VolumeIcon } from './icons';
 
 export function PlayerBar() {
-  const { current, playing, loading, toggle, next, prev, volume, muted, setVolume, toggleMute, quality, queue, index, videoHidden, toggleVideo } = usePlayer();
+  const {
+    current, playing, loading, toggle, next, prev, volume, muted, setVolume, toggleMute, quality, queue, index,
+    videoHidden, toggleVideo, shuffle, toggleShuffle, repeat, cycleRepeat, panelOpen, togglePanel, videoInPanel,
+  } = usePlayer();
   const { favoriteIds, toggleFavorite } = useLibrary();
+  const wide = useMediaQuery(PANEL_MEDIA);
+  const repeatLabel = repeat === 'off' ? 'Répéter : désactivé' : repeat === 'all' ? 'Répéter : toute la file' : 'Répéter : ce titre';
 
   return (
     <footer className={`player ${current ? '' : 'player--idle'}`} aria-label="Lecteur">
@@ -24,6 +31,7 @@ export function PlayerBar() {
               aria-label="J'aime" aria-pressed={favoriteIds.has(current.id)}>
               <HeartIcon size={18} filled={favoriteIds.has(current.id)} />
             </button>
+            <AddToPlaylistButton track={current} direction="up" />
           </>
         ) : (
           <span className="muted player__idle">Choisissez un titre pour lancer la lecture</span>
@@ -32,23 +40,37 @@ export function PlayerBar() {
 
       <div className="player__center">
         <div className="player__controls">
+          <button className={`icon-btn player__mode ${shuffle ? 'is-on' : ''}`} onClick={toggleShuffle}
+            aria-label="Lecture aléatoire" aria-pressed={shuffle} title={shuffle ? 'Lecture aléatoire : activée' : 'Lecture aléatoire'}>
+            <ShuffleIcon size={18} />
+          </button>
           <button className="icon-btn" onClick={prev} disabled={!current} aria-label="Précédent"><PrevIcon /></button>
           <button className={`player__toggle ${loading ? 'is-loading' : ''}`} onClick={toggle} disabled={!current} aria-label={playing ? 'Pause' : 'Lecture'}>
             {playing ? <PauseIcon size={20} /> : <PlayIcon size={20} />}
           </button>
-          <button className="icon-btn" onClick={next} disabled={!current || index >= queue.length - 1} aria-label="Suivant"><NextIcon /></button>
+          <button className="icon-btn" onClick={next} disabled={!current || (index >= queue.length - 1 && repeat !== 'all')} aria-label="Suivant"><NextIcon /></button>
+          <button className={`icon-btn player__mode ${repeat !== 'off' ? 'is-on' : ''}`} onClick={cycleRepeat}
+            aria-label={repeatLabel} title={repeatLabel}>
+            <RepeatIcon size={18} one={repeat === 'one'} />
+          </button>
         </div>
         <SeekBar />
       </div>
 
       <div className="player__side">
-        {current?.source === 'youtube' && (
+        {current?.source === 'youtube' && !videoInPanel && (
           <button className={`icon-btn ${videoHidden ? '' : 'is-active'}`} onClick={toggleVideo}
             aria-label={videoHidden ? 'Afficher la vidéo' : 'Masquer la vidéo'} aria-pressed={!videoHidden} title={videoHidden ? 'Afficher la vidéo' : 'Masquer la vidéo'}>
             <VideoIcon size={18} />
           </button>
         )}
         {quality && <span className="badge" title="Source ou qualité du flux en cours">{quality}</span>}
+        {wide && (
+          <button className={`icon-btn ${panelOpen ? 'is-on' : ''}`} onClick={togglePanel}
+            aria-label="Panneau « En cours de lecture »" aria-pressed={panelOpen} title="En cours de lecture">
+            <PanelIcon size={18} />
+          </button>
+        )}
         <button className="icon-btn" onClick={toggleMute} aria-label={muted ? 'Réactiver le son' : 'Couper le son'}>
           <VolumeIcon level={muted ? 0 : volume} />
         </button>
