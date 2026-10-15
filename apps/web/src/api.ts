@@ -91,8 +91,9 @@ async function raw<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 /** Rafraîchit la session (un seul appel concurrent). Renvoie null si la session a expiré. */
 export function refreshSession(): Promise<Session | null> {
-  refreshing ??= raw<Session>('/auth/refresh', { method: 'POST' })
+  refreshing ??= raw<Session | undefined>('/auth/refresh', { method: 'POST' })
     .then((s) => {
+      if (!s) return null; // 204 : aucune session ouverte
       setAccessToken(s.accessToken);
       return s;
     })

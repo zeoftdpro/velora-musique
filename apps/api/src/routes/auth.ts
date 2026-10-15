@@ -74,7 +74,8 @@ export default async function authRoutes(app: FastifyInstance) {
 
   app.post('/auth/refresh', { config: rateLimit }, async (req, reply) => {
     const token = parse(RefreshBody, req.body)?.refreshToken ?? req.cookies[REFRESH_COOKIE];
-    if (!token) throw unauthorized('Jeton de rafraîchissement manquant');
+    // Visiteur non connecté : rien à rafraîchir, ce n'est pas une erreur.
+    if (!token) return reply.code(204).send();
     const userId = await consumeRefreshToken(token);
     if (!userId) {
       clearRefreshCookie(reply);

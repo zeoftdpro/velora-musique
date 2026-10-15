@@ -47,10 +47,12 @@ export const DESKTOP_DOWNLOAD_URL = (import.meta.env.VITE_DESKTOP_DOWNLOAD_URL a
 // Vérifié une seule fois : le fichier n'existe que si l'installateur a été construit et publié.
 let desktopCheck: Promise<boolean> | null = null;
 function checkDesktopDownload() {
+  // Autre origine (release GitHub) : pas de vérification possible sans CORS, on fait confiance à l'URL configurée.
+  if (new URL(DESKTOP_DOWNLOAD_URL, window.location.href).origin !== window.location.origin) return Promise.resolve(true);
   desktopCheck ??= fetch(DESKTOP_DOWNLOAD_URL, { method: 'HEAD' })
     // Un hébergeur de SPA renvoie index.html pour un fichier absent : on exige un binaire.
     .then((res) => res.ok && !(res.headers.get('content-type') ?? '').includes('text/html'))
-    .catch(() => DESKTOP_DOWNLOAD_URL.startsWith('http')); // autre origine sans CORS : on fait confiance à l'URL configurée
+    .catch(() => false);
   return desktopCheck;
 }
 

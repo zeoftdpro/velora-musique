@@ -29,7 +29,7 @@ export async function buildApp() {
   });
 
   await app.register(cors, {
-    origin: env.WEB_ORIGIN.split(',').map((o) => o.trim()),
+    origin: env.WEB_ORIGIN.split(',').map((o) => o.trim().replace(/\/+$/, '')).filter(Boolean),
     credentials: true,
   });
   await app.register(cookie);

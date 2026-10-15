@@ -22,8 +22,12 @@ services:
         value: "5"
       - key: JWT_SECRET
         generateValue: true
-      - key: WEB_ORIGIN # adresse du site Netlify, ex. https://velora.netlify.app
-        sync: false
+      - key: WEB_ORIGIN
+        value: https://velora-musique.netlify.app
+      # Adresses générées par l'API (flux HLS, fichiers signés, pochettes) : via le relais /api du site.
+      # Même origine que la page : pas de CORS, et les flux restent accessibles depuis l'appli Windows.
+      - key: PUBLIC_API_URL
+        value: https://velora-musique.netlify.app/api
       - key: YOUTUBE_API_KEY
         sync: false
       - key: JAMENDO_CLIENT_ID
