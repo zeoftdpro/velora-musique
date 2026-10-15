@@ -1,4 +1,4 @@
 # Relais vers le serveur Velora (Render) : le site et l'API partagent ainsi la même adresse.
-/api/*  https://velora-api.onrender.com/:splat  200
+/api/*  https://velora-api-6f50.onrender.com/:splat  200
 # Application monopage : toutes les autres routes (/search, /album/…) servent index.html.
 /*      /index.html   200
