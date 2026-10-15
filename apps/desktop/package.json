@@ -5,7 +5,7 @@
   "description": "Velora pour Windows : l'application web dans une fenêtre dédiée, avec installateur .exe",
   "author": "Velora",
   "main": "main.cjs",
-  "veloraAppUrl": "http://localhost:5173",
+  "veloraAppUrl": "https://velora-musique.netlify.app",
   "scripts": {
     "start": "electron .",
     "dist": "node scripts/dist.cjs"
