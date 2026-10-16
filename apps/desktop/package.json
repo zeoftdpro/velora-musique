@@ -1,6 +1,7 @@
 {
   "name": "@velora/desktop",
-  "version": "0.1.0",
+  "productName": "Velora Musique",
+  "version": "0.2.0",
   "private": true,
   "description": "Velora pour Windows : l'application web dans une fenêtre dédiée, avec installateur .exe",
   "author": "Velora",
@@ -16,7 +17,8 @@
   },
   "build": {
     "appId": "app.velora.desktop",
-    "productName": "Velora",
+    "productName": "Velora Musique",
+    "extraMetadata": { "name": "velora-musique" },
     "electronVersion": "43.7.7",
     "npmRebuild": false,
     "files": ["main.cjs", "preload.cjs", "offline.html", "build/icon.png", "package.json"],
@@ -31,8 +33,8 @@
       "runAfterFinish": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Velora",
-      "uninstallDisplayName": "Velora",
+      "shortcutName": "Velora Musique",
+      "uninstallDisplayName": "Velora Musique",
       "artifactName": "Velora-Setup-${version}.${ext}"
     }
   }

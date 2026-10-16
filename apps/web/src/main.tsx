@@ -20,6 +20,8 @@ import { setupPwa } from './pwa';
 import './styles.css';
 
 setupPwa();
+// Netlify (offre gratuite) ajoute un badge non masquable en bas à droite : on lui réserve sa place pour qu'il ne couvre pas le volume.
+if (document.querySelector('script[data-nf-variant]')) document.documentElement.classList.add('has-host-badge');
 
 /** Espace connecté : la bibliothèque et le lecteur n'existent que pour un utilisateur authentifié. */
 function Protected() {

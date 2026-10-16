@@ -46,7 +46,7 @@ function createWindow() {
     y: state.y,
     minWidth: 380,
     minHeight: 600,
-    title: 'Velora',
+    title: 'Velora Musique',
     backgroundColor: '#0b0b0f',
     autoHideMenuBar: true,
     show: false,
@@ -60,6 +60,8 @@ function createWindow() {
   win.setMenu(null);
   if (state.maximized) win.maximize();
   win.once('ready-to-show', () => win.show());
+  // Garde « Velora Musique » dans la barre de titre et des tâches (la page web s'intitule seulement « Velora »).
+  win.on('page-title-updated', (event) => event.preventDefault());
 
   // Liens externes (YouTube, Jamendo…) : navigateur par défaut, jamais dans la fenêtre de l'appli.
   win.webContents.setWindowOpenHandler(({ url }) => {

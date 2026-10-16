@@ -42,7 +42,7 @@ export function AccountPage() {
               </p></>
             ) : install.desktopDownload ? (
               <><strong>Velora pour Windows</strong><p className="muted small">
-                Téléchargez l’installateur (.exe) : raccourci sur le bureau et dans le menu Démarrer, fenêtre dédiée, touches multimédia.
+                Téléchargez l’installateur (.exe), puis ouvrez « Velora Musique » depuis le bureau ou le menu Démarrer : fenêtre dédiée, touches multimédia.
                 {install.canPrompt && <> Ou <button className="link-btn" onClick={install.prompt}>installer depuis le navigateur</button>.</>}
               </p></>
             ) : install.canPrompt ? (

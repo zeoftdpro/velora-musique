@@ -266,6 +266,8 @@ code { background: var(--bg-elev-2); padding: 6px 10px; border-radius: 6px; font
 .player__toggle.is-loading { animation: pulse 1s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: 0.6; } }
 .player__side { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+/* Badge de l'hébergeur (voir main.tsx) : ~210 px en bas à droite, le volume reste à sa gauche. */
+.has-host-badge .player { padding-right: 232px; }
 .badge { font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 99px; background: var(--accent-soft); color: #93c5fd; white-space: nowrap; }
 
 .seek { display: flex; align-items: center; gap: 10px; width: 100%; max-width: 620px; }
@@ -374,7 +376,7 @@ code { background: var(--bg-elev-2); padding: 6px 10px; border-radius: 6px; font
   .nav { flex-direction: row; justify-content: space-around; width: 100%; }
   .nav a { flex-direction: column; gap: 4px; padding: 6px 10px; font-size: 11px; background: none !important; }
   .nav__mobile-only { display: flex !important; }
-  .player { grid-template-columns: minmax(0, 1fr) auto; padding: 8px 12px; gap: 10px; }
+  .player, .has-host-badge .player { grid-template-columns: minmax(0, 1fr) auto; padding: 8px 12px; gap: 10px; }
   .player__center { flex-direction: row-reverse; }
   .player__side, .seek__time { display: none; }
   .seek { position: absolute; left: 0; right: 0; margin-top: -9px; max-width: none; }
