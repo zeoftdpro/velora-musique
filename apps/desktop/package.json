@@ -1,7 +1,7 @@
 {
   "name": "@velora/desktop",
   "productName": "Velora Musique",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "description": "Velora pour Windows : l'application web dans une fenêtre dédiée, avec installateur .exe",
   "author": "Velora",
