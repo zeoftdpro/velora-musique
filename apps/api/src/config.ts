@@ -16,6 +16,9 @@ const EnvSchema = z.object({
   // Sur Render, l'adresse publique du service est fournie automatiquement (RENDER_EXTERNAL_URL).
   PUBLIC_API_URL: z.string().url().default(process.env.RENDER_EXTERNAL_URL ?? 'http://localhost:4000'),
   WEB_ORIGIN: z.string().default('http://localhost:5173'),
+  // Secret partagé avec le relais Netlify (redirection « signed ») : une fois défini, l'API refuse toute
+  // requête qui ne passe pas par le site, ce qui empêche de contourner ses protections en appelant Render en direct.
+  PROXY_SIGNATURE_SECRET: z.preprocess(emptyToUndefined, z.string().min(32, 'PROXY_SIGNATURE_SECRET doit faire au moins 32 caractères').optional()),
 
   JWT_SECRET: z.string().min(16, 'JWT_SECRET doit faire au moins 16 caractères'),
   JWT_ACCESS_TTL: z.coerce.number().int().positive().default(900),

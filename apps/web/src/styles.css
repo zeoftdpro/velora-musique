@@ -323,7 +323,7 @@ code { background: var(--bg-elev-2); padding: 6px 10px; border-radius: 6px; font
 .form input:focus, .form textarea:focus { outline: none; border-color: var(--accent); }
 .form input:disabled { color: var(--text-muted); }
 .form .checkbox { flex-direction: row; align-items: center; gap: 10px; color: var(--text); font-weight: 500; }
-.form__actions { display: flex; justify-content: flex-end; gap: 10px; }
+.form__actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
 .form__error { margin: 0; color: var(--danger); font-size: 14px; }
 
 .btn { padding: 10px 20px; border-radius: 99px; font-weight: 700; font-size: 14px; transition: background 0.15s, transform 0.1s; }

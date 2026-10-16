@@ -137,6 +137,9 @@ export const api = {
     raw<Session>('/auth/register', { method: 'POST', body: json(body) }),
   login: (body: { email: string; password: string }) => raw<Session>('/auth/login', { method: 'POST', body: json(body) }),
   logout: () => raw<void>('/auth/logout', { method: 'POST' }),
+  logoutAll: () => request<void>('/auth/logout-all', { method: 'POST' }),
+  changePassword: (body: { currentPassword: string; newPassword: string }) =>
+    request<Session>('/auth/password', { method: 'POST', body: json(body) }),
 
   health: () => raw<{ status: string }>('/health'),
   me: () => request<User>('/me'),

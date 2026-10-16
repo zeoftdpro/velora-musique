@@ -24,6 +24,9 @@ services:
         generateValue: true
       - key: WEB_ORIGIN
         value: https://velora-musique.netlify.app
+      # Même valeur que VELORA_PROXY_SECRET sur Netlify : n'accepte que les requêtes relayées par le site.
+      - key: PROXY_SIGNATURE_SECRET
+        sync: false
       # Adresses générées par l'API (flux HLS, fichiers signés, pochettes) : via le relais /api du site.
       # Même origine que la page : pas de CORS, et les flux restent accessibles depuis l'appli Windows.
       - key: PUBLIC_API_URL

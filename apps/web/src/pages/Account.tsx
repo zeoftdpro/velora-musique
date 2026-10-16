@@ -1,14 +1,19 @@
+import { useState } from 'react';
 import { api } from '../api';
 import { useAuth } from '../context/auth';
+import { useDialog } from '../context/dialog';
 import { useToast } from '../context/toast';
 import { useTitle } from '../hooks';
 import { useInstall } from '../pwa';
 
 export function AccountPage() {
   useTitle('Compte');
-  const { user, setUser, logout } = useAuth();
+  const { user, setUser, logout, logoutEverywhere, changePassword } = useAuth();
   const toast = useToast();
+  const dialog = useDialog();
   const install = useInstall();
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [passwordBusy, setPasswordBusy] = useState(false);
   if (!user) return null;
 
   const saveProfile = async (form: FormData) => {
@@ -16,6 +21,35 @@ export function AccountPage() {
     if (!displayName) return;
     setUser(await api.updateMe({ displayName }));
     toast('Profil mis à jour');
+  };
+
+  const savePassword = async (form: FormData) => {
+    const current = String(form.get('currentPassword') ?? '');
+    const next = String(form.get('newPassword') ?? '');
+    setPasswordError(null);
+    if (next !== String(form.get('confirmPassword') ?? '')) {
+      setPasswordError('Les deux nouveaux mots de passe ne correspondent pas');
+      return;
+    }
+    setPasswordBusy(true);
+    try {
+      await changePassword(current, next);
+      toast('Mot de passe modifié : vos autres appareils ont été déconnectés');
+    } catch (err) {
+      setPasswordError(err instanceof Error ? err.message : 'Une erreur est survenue');
+    } finally {
+      setPasswordBusy(false);
+    }
+  };
+
+  const signOutEverywhere = async () => {
+    const ok = await dialog.confirm({
+      title: 'Déconnecter tous les appareils ?',
+      message: 'Toutes les sessions ouvertes sur ce compte (navigateurs, appli Windows), y compris celle-ci, seront fermées.',
+      confirmLabel: 'Tout déconnecter',
+      danger: true,
+    });
+    if (ok) await logoutEverywhere().catch(() => toast('Impossible de fermer les sessions, réessayez'));
   };
 
   return (
@@ -28,6 +62,21 @@ export function AccountPage() {
           <label>Email<input value={user.email} disabled /></label>
           <label>Nom affiché<input name="displayName" defaultValue={user.displayName} maxLength={60} required /></label>
           <div className="form__actions"><button className="btn btn--primary">Enregistrer</button></div>
+        </form>
+      </section>
+
+      <section className="panel section">
+        <h2 className="section__title">Sécurité</h2>
+        <form className="form" action={savePassword}>
+          <input type="email" name="username" autoComplete="username" value={user.email} readOnly hidden />
+          <label>Mot de passe actuel<input name="currentPassword" type="password" autoComplete="current-password" required /></label>
+          <label>Nouveau mot de passe<input name="newPassword" type="password" autoComplete="new-password" minLength={8} required /></label>
+          <label>Confirmer le nouveau mot de passe<input name="confirmPassword" type="password" autoComplete="new-password" minLength={8} required /></label>
+          {passwordError && <p className="form__error" role="alert">{passwordError}</p>}
+          <div className="form__actions">
+            <button type="button" className="btn btn--ghost" onClick={signOutEverywhere}>Déconnecter tous les appareils</button>
+            <button className="btn btn--primary" disabled={passwordBusy}>{passwordBusy ? '…' : 'Changer le mot de passe'}</button>
+          </div>
         </form>
       </section>
 

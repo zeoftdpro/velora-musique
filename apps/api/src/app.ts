@@ -1,13 +1,13 @@
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
-import rateLimit from '@fastify/rate-limit';
 import { sql } from 'drizzle-orm';
 import { ZodError } from 'zod';
 import { env } from './config.js';
 import { db } from './db/client.js';
 import { HttpError } from './lib/errors.js';
 import authPlugin from './plugins/auth.js';
+import securityPlugin from './plugins/security.js';
 import authRoutes from './routes/auth.js';
 import catalogRoutes from './routes/catalog.js';
 import fileRoutes from './routes/files.js';
@@ -26,6 +26,8 @@ export async function buildApp() {
       },
     },
     trustProxy: true,
+    // L'API ne reçoit que de petits objets JSON : inutile d'accepter 1 Mo (valeur par défaut).
+    bodyLimit: 64 * 1024,
   });
 
   await app.register(cors, {
@@ -36,7 +38,7 @@ export async function buildApp() {
     credentials: true,
   });
   await app.register(cookie);
-  await app.register(rateLimit, { global: false });
+  await app.register(securityPlugin);
   await app.register(authPlugin);
 
   app.setErrorHandler((error, req, reply) => {

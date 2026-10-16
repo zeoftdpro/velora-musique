@@ -3,9 +3,10 @@
  * L'adresse chargée vient de `VELORA_APP_URL` ou du champ `veloraAppUrl` du package.json : en pointant
  * sur le site en ligne (Netlify…), l'appli installée profite de chaque mise à jour sans être réinstallée.
  */
-const { app, BrowserWindow, shell } = require('electron');
+const { app, BrowserWindow, session, shell } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
+const { pathToFileURL } = require('node:url');
 const pkg = require('./package.json');
 
 const APP_URL = process.env.VELORA_APP_URL || pkg.veloraAppUrl;
@@ -68,11 +69,14 @@ function createWindow() {
     openExternal(url);
     return { action: 'deny' };
   });
+  // Seuls le site Velora et la page hors ligne s'ouvrent dans la fenêtre : aucun autre fichier local.
+  const offlinePage = pathToFileURL(path.join(__dirname, 'offline.html')).href;
   win.webContents.on('will-navigate', (event, url) => {
-    if (url.startsWith('file:') || new URL(url).origin === appOrigin) return;
+    if (url.split(/[?#]/)[0] === offlinePage || new URL(url).origin === appOrigin) return;
     event.preventDefault();
     openExternal(url);
   });
+  win.webContents.on('will-attach-webview', (event) => event.preventDefault());
 
   // Serveur injoignable (hors ligne, site arrêté) : page d'attente avec bouton « Réessayer ».
   win.webContents.on('did-fail-load', (_event, code, _description, _url, isMainFrame) => {
@@ -91,5 +95,14 @@ app.on('second-instance', () => {
   win.focus();
 });
 
-app.whenReady().then(createWindow);
+// Permissions (caméra, micro, position, notifications…) refusées par défaut : l'appli n'a besoin que du plein
+// écran (vidéos YouTube) et de l'écriture dans le presse-papiers (copier un lien).
+const ALLOWED_PERMISSIONS = new Set(['fullscreen', 'clipboard-sanitized-write']);
+
+app.whenReady().then(() => {
+  session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) =>
+    callback(ALLOWED_PERMISSIONS.has(permission)),
+  );
+  createWindow();
+});
 app.on('window-all-closed', () => app.quit());

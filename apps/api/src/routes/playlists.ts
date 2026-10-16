@@ -3,7 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db } from '../db/client.js';
 import { albums, artists, genres, playlists, playlistTracks, tracks } from '../db/schema.js';
-import { forbidden, notFound } from '../lib/errors.js';
+import { forbidden, HttpError, notFound } from '../lib/errors.js';
 import { IdParams, parse } from '../lib/validation.js';
 import { toTrackDto, trackColumns } from '../services/catalog.js';
 
@@ -15,6 +15,10 @@ const PlaylistBody = z.object({
 const AddTrackBody = z.object({ trackId: z.string().uuid() });
 const ItemParams = z.object({ id: z.string().uuid(), itemId: z.string().uuid() });
 const MoveBody = z.object({ position: z.number().int().min(0) });
+
+// Plafonds par compte : largement au-delà d'un usage normal, ils empêchent de remplir la base à la chaîne.
+const MAX_PLAYLISTS = 300;
+const MAX_PLAYLIST_TRACKS = 5000;
 
 export default async function playlistRoutes(app: FastifyInstance) {
   async function loadOwned(id: string, userId: string) {
@@ -45,6 +49,8 @@ export default async function playlistRoutes(app: FastifyInstance) {
 
   app.post('/playlists', { preHandler: app.authenticate }, async (req, reply) => {
     const body = parse(PlaylistBody, req.body);
+    const [owned] = await db.select({ n: count() }).from(playlists).where(eq(playlists.ownerId, req.user.sub));
+    if ((owned?.n ?? 0) >= MAX_PLAYLISTS) throw new HttpError(422, `Limite de ${MAX_PLAYLISTS} playlists atteinte`, 'LIMIT_REACHED');
     const [playlist] = await db
       .insert(playlists)
       .values({ ownerId: req.user.sub, name: body.name, description: body.description ?? null, isPublic: body.isPublic ?? false })
@@ -106,9 +112,12 @@ export default async function playlistRoutes(app: FastifyInstance) {
 
     const item = await db.transaction(async (tx) => {
       const [last] = await tx
-        .select({ position: max(playlistTracks.position) })
+        .select({ position: max(playlistTracks.position), n: count() })
         .from(playlistTracks)
         .where(eq(playlistTracks.playlistId, id));
+      if ((last?.n ?? 0) >= MAX_PLAYLIST_TRACKS) {
+        throw new HttpError(422, `Une playlist ne peut pas dépasser ${MAX_PLAYLIST_TRACKS} titres`, 'LIMIT_REACHED');
+      }
       const [inserted] = await tx
         .insert(playlistTracks)
         .values({ playlistId: id, trackId, position: (last?.position ?? -1) + 1 })

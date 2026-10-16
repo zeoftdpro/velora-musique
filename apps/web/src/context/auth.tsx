@@ -7,6 +7,10 @@ type AuthState = {
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, displayName: string) => Promise<void>;
   logout: () => Promise<void>;
+  /** Ferme toutes les sessions du compte, y compris celle-ci. */
+  logoutEverywhere: () => Promise<void>;
+  /** Change le mot de passe : les autres appareils sont déconnectés, celui-ci reste connecté. */
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   setUser: (user: User) => void;
 };
 
@@ -56,6 +60,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setAccessToken(null);
         setUser(null);
       },
+      logoutEverywhere: async () => {
+        await api.logoutAll();
+        setAccessToken(null);
+        setUser(null);
+      },
+      changePassword: async (currentPassword, newPassword) =>
+        applySession(await api.changePassword({ currentPassword, newPassword })),
     }),
     [user, ready, applySession],
   );
