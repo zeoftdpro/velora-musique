@@ -2,6 +2,7 @@
 # À définir dans Netlify → Site configuration → Environment variables :
 #   VITE_API_URL                adresse publique de l'API Velora (ex. https://velora-api.onrender.com)
 #   VITE_DESKTOP_DOWNLOAD_URL   (optionnel) lien de l'installateur Windows, ex. une release GitHub
+#   VITE_ANDROID_DOWNLOAD_URL   (optionnel) lien de l'appli Android (.apk), ex. la même release GitHub
 [build]
   command = "npm run build -w apps/web"
   publish = "apps/web/dist"

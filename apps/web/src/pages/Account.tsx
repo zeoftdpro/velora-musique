@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { api } from '../api';
+import { IosInstallSteps } from '../components/InstallBanner';
 import { useAuth } from '../context/auth';
 import { useDialog } from '../context/dialog';
 import { useToast } from '../context/toast';
@@ -94,16 +95,23 @@ export function AccountPage() {
                 Téléchargez l’installateur (.exe), puis ouvrez « Velora Musique » depuis le bureau ou le menu Démarrer : fenêtre dédiée, touches multimédia.
                 {install.canPrompt && <> Ou <button className="link-btn" onClick={install.prompt}>installer depuis le navigateur</button>.</>}
               </p></>
+            ) : install.androidDownload ? (
+              <><strong>Velora pour Android</strong><p className="muted small">
+                Téléchargez l’appli (.apk), ouvrez-la et autorisez l’installation si Android le demande : plein écran, lecture en arrière-plan et commandes sur l’écran verrouillé.
+                {install.canPrompt && <> Ou <button className="link-btn" onClick={install.prompt}>installer depuis le navigateur</button>.</>}
+              </p></>
             ) : install.canPrompt ? (
               <><strong>Installer Velora</strong><p className="muted small">Une vraie fenêtre, une icône sur votre bureau ou votre écran d’accueil, sans barre de navigateur.</p></>
-            ) : install.iosHint ? (
-              <><strong>Installer sur iPhone / iPad</strong><p className="muted small">Dans Safari, touchez <b>Partager</b> puis <b>Sur l’écran d’accueil</b>.</p></>
+            ) : install.ios ? (
+              <><strong>Installer sur iPhone / iPad</strong><IosInstallSteps browser={install.ios} /></>
             ) : (
               <><strong>Installer Velora</strong><p className="muted small">Ouvrez ce site dans Chrome ou Edge et utilisez l’icône d’installation de la barre d’adresse (ou le menu ⋮ → « Installer Velora »).</p></>
             )}
           </div>
           {install.desktopDownload ? (
             <a className="btn btn--primary" href={install.desktopDownload} download>Télécharger (.exe)</a>
+          ) : install.androidDownload ? (
+            <a className="btn btn--primary" href={install.androidDownload} download>Télécharger (.apk)</a>
           ) : install.canPrompt && <button className="btn btn--primary" onClick={install.prompt}>Installer</button>}
         </div>
       </section>

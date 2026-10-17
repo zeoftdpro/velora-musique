@@ -5,6 +5,7 @@ import { useToast } from '../context/toast';
 import { usePlayer } from '../context/player';
 import { PANEL_MEDIA, useMediaQuery } from '../hooks';
 import { useInstall } from '../pwa';
+import { InstallBanner } from './InstallBanner';
 import { NowPlayingPanel } from './NowPlaying';
 import { PlayerBar } from './PlayerBar';
 import { DownloadIcon, HeartIcon, HomeIcon, LibraryIcon, LogoMark, PlusIcon, SearchIcon, UserIcon } from './icons';
@@ -52,8 +53,8 @@ export function Layout() {
           ))}
         </div>
 
-        {install.desktopDownload ? (
-          <a className="sidebar__install" href={install.desktopDownload} download>
+        {install.desktopDownload || install.androidDownload ? (
+          <a className="sidebar__install" href={install.desktopDownload ?? install.androidDownload ?? undefined} download>
             <DownloadIcon size={18} /> Installer l’appli
           </a>
         ) : install.canPrompt && (
@@ -68,6 +69,7 @@ export function Layout() {
       </aside>
 
       <main className="main">
+        <InstallBanner />
         <Outlet />
       </main>
 

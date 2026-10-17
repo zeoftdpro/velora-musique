@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { API_CONFIGURED } from '../api';
+import { InstallBanner } from '../components/InstallBanner';
 import { LogoMark } from '../components/icons';
 import { useAuth } from '../context/auth';
 import { useTitle } from '../hooks';
@@ -31,6 +32,7 @@ export function AuthPage({ mode }: { mode: 'login' | 'register' }) {
 
   return (
     <div className="auth">
+      <InstallBanner />
       <div className="auth__card">
         <div className="auth__brand"><LogoMark size={40} /><span>Velora</span></div>
         <h1>{mode === 'login' ? 'Connexion' : 'Créer un compte'}</h1>

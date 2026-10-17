@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "app.velora.musique",
+      "sha256_cert_fingerprints": [
+        "52:DB:9D:E6:4D:FB:59:30:6C:C3:4F:0D:1C:D7:B0:EB:EB:56:E9:B0:C5:BD:0D:0E:8C:D1:BA:63:11:9C:20:E3"
+      ]
+    }
+  }
+]

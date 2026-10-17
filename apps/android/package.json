@@ -1,0 +1,15 @@
+{
+  "name": "@velora/android",
+  "productName": "Velora Musique",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Velora pour Android : le site en plein écran dans Chrome (Trusted Web Activity), avec un APK à installer",
+  "veloraAppUrl": "https://velora-musique.netlify.app",
+  "packageId": "app.velora.musique",
+  "scripts": {
+    "dist": "node scripts/dist.cjs"
+  },
+  "devDependencies": {
+    "@bubblewrap/core": "1.27.0"
+  }
+}
