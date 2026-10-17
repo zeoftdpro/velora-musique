@@ -1,0 +1,10 @@
+# Envoyé à Vercel par « vercel deploy » : seul le site (apps/web) est construit là-bas.
+music/
+storage/
+.pgdata/
+apps/desktop/
+apps/android/
+apps/web/public/downloads/
+apps/web/dist/
+.env
+.env.local

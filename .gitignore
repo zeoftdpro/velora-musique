@@ -8,3 +8,6 @@ music/
 .pgdata/
 apps/desktop/release/
 apps/web/public/downloads/
+
+.vercel
+.env.local

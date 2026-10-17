@@ -1,12 +1,12 @@
 {
   "name": "@velora/desktop",
   "productName": "Velora Musique",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "private": true,
   "description": "Velora pour Windows : l'application web dans une fenêtre dédiée, avec installateur .exe",
   "author": "Velora",
   "main": "main.cjs",
-  "veloraAppUrl": "https://velora-musique.netlify.app",
+  "veloraAppUrl": "https://velora-musique.vercel.app",
   "scripts": {
     "start": "electron .",
     "dist": "node scripts/dist.cjs"

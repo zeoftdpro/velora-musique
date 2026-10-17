@@ -22,15 +22,16 @@ services:
         value: "5"
       - key: JWT_SECRET
         generateValue: true
+      # Site sur Vercel ; l'ancienne adresse Netlify reste acceptée le temps de la transition.
       - key: WEB_ORIGIN
-        value: https://velora-musique.netlify.app
+        value: https://velora-musique.vercel.app,https://velora-musique.netlify.app
       # Même valeur que VELORA_PROXY_SECRET sur Netlify : n'accepte que les requêtes relayées par le site.
       - key: PROXY_SIGNATURE_SECRET
         sync: false
       # Adresses générées par l'API (flux HLS, fichiers signés, pochettes) : via le relais /api du site.
       # Même origine que la page : pas de CORS, et les flux restent accessibles depuis l'appli Windows.
       - key: PUBLIC_API_URL
-        value: https://velora-musique.netlify.app/api
+        value: https://velora-musique.vercel.app/api
       - key: YOUTUBE_API_KEY
         sync: false
       - key: JAMENDO_CLIENT_ID
