@@ -23,6 +23,9 @@ type PlayerState = {
   toggleShuffle: () => void;
   repeat: Repeat;
   cycleRepeat: () => void;
+  /** Lecture automatique : à la fin de la file, des titres recommandés sont ajoutés et enchaînés. */
+  autoplay: boolean;
+  toggleAutoplay: () => void;
   /** Panneau « En cours de lecture » (à droite, sur grand écran). */
   panelOpen: boolean;
   togglePanel: () => void;
@@ -58,6 +61,7 @@ const VIDEO_HIDDEN_KEY = 'velora.ytHidden';
 const SHUFFLE_KEY = 'velora.shuffle';
 const REPEAT_KEY = 'velora.repeat';
 const PANEL_KEY = 'velora.panel';
+const AUTOPLAY_KEY = 'velora.autoplay';
 
 function readStored(key: string) {
   try {
@@ -133,6 +137,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     return v === 'all' || v === 'one' ? v : 'off';
   });
   const [panelOpen, setPanelOpen] = useState(() => readStored(PANEL_KEY) !== 'false');
+  const [autoplay, setAutoplay] = useState(() => readStored(AUTOPLAY_KEY) !== 'false');
+  // Suggestions demandées pour le dernier titre de la file (une seule fois par titre).
+  const radioRef = useRef<{ seed: string; promise: Promise<Track[]> } | null>(null);
   const [videoSlot, setVideoSlot] = useState<HTMLElement | null>(null);
   const [slotRect, setSlotRect] = useState<SlotRect | null>(null);
   // Ordre d'origine de la file, conservé pendant la lecture aléatoire.
@@ -368,11 +375,22 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const next = useCallback(() => {
     if (index + 1 < queue.length) playAt(queue, index + 1);
     else if (repeat === 'all' && queue.length > 0) playAt(queue, 0);
-    else {
+    else if (autoplay && current && radioRef.current?.seed === current.id) {
+      // Suggestions encore en route (titre passé tout de suite) : on enchaîne dès leur arrivée.
+      const id = loadId.current;
+      void radioRef.current.promise.then((added) => {
+        if (id !== loadId.current) return; // l'utilisateur a lancé autre chose entre-temps
+        if (added.length > 0) playAt([...queue, ...added], index + 1);
+        else {
+          pause();
+          seek(0);
+        }
+      });
+    } else {
       pause();
       seek(0);
     }
-  }, [index, queue, playAt, pause, seek, repeat]);
+  }, [index, queue, playAt, pause, seek, repeat, autoplay, current]);
   nextRef.current = next;
 
   // Fin naturelle d'un titre : « répéter le titre » le relance, sinon on passe au suivant.
@@ -401,6 +419,32 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       setIndex(Math.max(0, original.findIndex((t) => t.id === current.id)));
     }
   }, [shuffle, current, queue, index]);
+
+  // Dernier titre de la file : on demande des suggestions pour la suite, ajoutées en fin de file.
+  useEffect(() => {
+    if (!autoplay || repeat !== 'off' || !current || index !== queue.length - 1) return;
+    if (radioRef.current?.seed === current.id) return;
+    const exclude = queue.slice(-100).map((t) => t.id);
+    const seed = current.id;
+    const promise = api
+      .radio(seed, exclude)
+      .then((found) => found.filter((t) => !exclude.includes(t.id)).map((t) => ({ ...t, suggested: true })))
+      .catch(() => [] as Track[]);
+    radioRef.current = { seed, promise };
+    void promise.then((added) => {
+      if (radioRef.current?.promise !== promise || added.length === 0) return;
+      // Seulement si la file n'a pas changé de fin entre-temps (titres ajoutés à la main…).
+      setQueue((q) => (q.at(-1)?.id === seed ? [...q, ...added] : q));
+      if (originalQueue.current?.at(-1)?.id === seed) originalQueue.current = [...originalQueue.current, ...added];
+    });
+  }, [autoplay, repeat, current, index, queue]);
+
+  const toggleAutoplay = useCallback(() => {
+    const enable = !autoplay;
+    setAutoplay(enable);
+    store(AUTOPLAY_KEY, String(enable));
+    if (!enable) radioRef.current = null;
+  }, [autoplay]);
 
   const cycleRepeat = useCallback(() => {
     const nextMode: Repeat = repeat === 'off' ? 'all' : repeat === 'all' ? 'one' : 'off';
@@ -614,13 +658,13 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const value = useMemo<PlayerState>(
     () => ({
       queue, index, current, playing, loading, volume, muted, quality, videoHidden,
-      shuffle, repeat, panelOpen, videoInPanel: slotRect !== null, registerVideoSlot: setVideoSlot,
+      shuffle, repeat, autoplay, panelOpen, videoInPanel: slotRect !== null, registerVideoSlot: setVideoSlot,
       playQueue, playNext, addToQueue, jumpTo, toggle, next, prev, seek, setVolume, toggleMute, toggleVideo,
-      toggleShuffle, cycleRepeat, togglePanel,
+      toggleShuffle, cycleRepeat, toggleAutoplay, togglePanel,
     }),
-    [queue, index, current, playing, loading, volume, muted, quality, videoHidden, shuffle, repeat, panelOpen, slotRect,
+    [queue, index, current, playing, loading, volume, muted, quality, videoHidden, shuffle, repeat, autoplay, panelOpen, slotRect,
       playQueue, playNext, addToQueue, jumpTo, toggle, next, prev, seek, setVolume, toggleMute, toggleVideo,
-      toggleShuffle, cycleRepeat, togglePanel],
+      toggleShuffle, cycleRepeat, toggleAutoplay, togglePanel],
   );
 
   // Panneau ouvert avec un emplacement visible : le clip s'y affiche (quel que soit le réglage « vidéo masquée »).

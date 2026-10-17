@@ -10,7 +10,7 @@ const UP_NEXT_COUNT = 10;
 
 /** Panneau « En cours de lecture », à droite (comme Spotify) : clip YouTube ou pochette, infos et file d'attente. */
 export function NowPlayingPanel() {
-  const { current, queue, index, togglePanel, registerVideoSlot, jumpTo } = usePlayer();
+  const { current, queue, index, togglePanel, registerVideoSlot, jumpTo, autoplay, toggleAutoplay } = usePlayer();
   const { favoriteIds, toggleFavorite } = useLibrary();
 
   if (!current) {
@@ -55,13 +55,26 @@ export function NowPlayingPanel() {
       </div>
 
       <section className="np__queue">
-        <h3 className="np__queue-title">À suivre</h3>
+        <div className="np__queue-head">
+          <h3 className="np__queue-title">À suivre</h3>
+          <button className={`switch ${autoplay ? 'switch--on' : ''}`} onClick={toggleAutoplay} role="switch" aria-checked={autoplay}
+            title="Enchaîner des titres recommandés à la fin de la file">
+            <span className="switch__track"><span className="switch__thumb" /></span> Lecture auto
+          </button>
+        </div>
         {upNext.length === 0 ? (
-          <p className="muted small">Fin de la file d’attente. Ajoutez des titres avec « Ajouter à la file d’attente ».</p>
+          <p className="muted small">
+            {autoplay
+              ? 'Fin de la file d’attente : des titres recommandés vont s’enchaîner.'
+              : 'Fin de la file d’attente. Ajoutez des titres avec « Ajouter à la file d’attente ».'}
+          </p>
         ) : (
           <ol className="np__list">
             {upNext.map((track, i) => (
               <li key={`${track.id}-${i}`}>
+                {track.suggested && !upNext[i - 1]?.suggested && !(i === 0 && current.suggested) && (
+                  <p className="np__suggested">Suggestions d’après vos écoutes</p>
+                )}
                 <button className="np__item" onClick={() => jumpTo(index + 1 + i)} aria-label={`Lire ${track.title}`}>
                   <Cover src={track.album.coverUrl} alt={track.album.title} size={40} />
                   <span className="np__item-text">

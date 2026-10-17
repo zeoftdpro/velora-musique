@@ -30,6 +30,8 @@ export type Track = {
   album: { id: string; title: string; coverUrl: string | null };
   genre: { name: string; slug: string } | null;
   source: 'local' | 'jamendo' | 'youtube';
+  /** Ajouté par la lecture automatique (suggestion), et non choisi par l'utilisateur. */
+  suggested?: boolean;
 };
 export type Album = {
   id: string;
@@ -46,6 +48,7 @@ export type PlaylistSummary = { id: string; name: string; description: string | 
 export type PlaylistDetail = PlaylistSummary & { isOwner: boolean; tracks: (Track & { itemId: string })[] };
 export type SearchResults = { tracks: Track[]; albums: Album[]; artists: Artist[] };
 export type WebSearchResults = { status: 'ok' | 'disabled' | 'quota' | 'error'; tracks: Track[] };
+export type Recommendations = { tracks: Track[]; basedOn: string[] };
 export type Session = { user: User; accessToken: string; expiresIn: number };
 
 // ---------------------------------------------------------------------------
@@ -162,6 +165,10 @@ export const api = {
   addFavorite: (trackId: string) => request<void>(`/me/favorites/${trackId}`, { method: 'PUT' }),
   removeFavorite: (trackId: string) => request<void>(`/me/favorites/${trackId}`, { method: 'DELETE' }),
   history: () => request<Track[]>('/me/history?limit=20'),
+  recommendations: () => request<Recommendations>('/me/recommendations?limit=24'),
+  /** Titres à enchaîner après `seedId` quand la file d'attente se termine (lecture automatique). */
+  radio: (seedId: string, exclude: string[]) =>
+    request<Track[]>(`/me/radio?${new URLSearchParams({ seed: seedId, exclude: exclude.join(',') })}`),
 
   playlists: () => request<PlaylistSummary[]>('/playlists'),
   playlist: (id: string) => request<PlaylistDetail>(`/playlists/${id}`),

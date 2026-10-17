@@ -7,8 +7,21 @@ import { notFound } from '../lib/errors.js';
 import { IdParams, Pagination, parse } from '../lib/validation.js';
 import { publicUser } from '../services/auth.js';
 import { selectTracks, toTrackDto } from '../services/catalog.js';
+import { radioAfter, recommendationsFor } from '../services/recommend.js';
 
 const UpdateProfile = z.object({ displayName: z.string().trim().min(1).max(60) });
+const RecommendationsQuery = z.object({ limit: z.coerce.number().int().min(1).max(50).default(24) });
+const RadioQuery = z.object({
+  seed: z.string().uuid('Identifiant invalide'),
+  // Titres déjà dans la file d'attente, séparés par des virgules.
+  exclude: z
+    .string()
+    .max(4000)
+    .default('')
+    .transform((v) => v.split(',').filter(Boolean))
+    .pipe(z.array(z.string().uuid()).max(100)),
+  limit: z.coerce.number().int().min(1).max(30).default(10),
+});
 
 export default async function meRoutes(app: FastifyInstance) {
   app.addHook('preHandler', app.authenticate);
@@ -66,5 +79,21 @@ export default async function meRoutes(app: FastifyInstance) {
       .orderBy(desc(playHistory.playedAt))
       .limit(limit);
     return rows.map(toTrackDto);
+  });
+
+  // --- Recommandations -------------------------------------------------------
+
+  // Limitées : une requête peut déclencher des recherches YouTube (quota) et Deezer.
+  const recommendationLimit = { rateLimit: { max: 20, timeWindow: '1 minute' } };
+
+  app.get('/me/recommendations', { config: recommendationLimit }, async (req) => {
+    const { limit } = parse(RecommendationsQuery, req.query);
+    return recommendationsFor(req.user.sub, limit);
+  });
+
+  // Lecture automatique : titres à enchaîner quand la file d'attente se termine.
+  app.get('/me/radio', { config: recommendationLimit }, async (req) => {
+    const { seed, exclude, limit } = parse(RadioQuery, req.query);
+    return radioAfter(req.user.sub, seed, exclude, limit);
   });
 }

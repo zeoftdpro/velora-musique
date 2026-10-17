@@ -3,13 +3,23 @@ import { db } from '../db/client.js';
 import { searchCache } from '../db/schema.js';
 
 const inflight = new Map<string, Promise<string[]>>();
+const normalize = (rawQuery: string) => rawQuery.trim().toLowerCase().replace(/\s+/g, ' ');
+
+/** Vrai si cette recherche est déjà en cache (donc gratuite en quota). */
+export async function isCached(provider: string, rawQuery: string, ttlMs: number) {
+  const [hit] = await db
+    .select({ createdAt: searchCache.createdAt })
+    .from(searchCache)
+    .where(and(eq(searchCache.provider, provider), eq(searchCache.query, normalize(rawQuery))));
+  return Boolean(hit && Date.now() - hit.createdAt.getTime() < ttlMs);
+}
 
 /**
  * Mémorise en base les ids de titres renvoyés par une recherche externe, pendant `ttlMs`.
  * Les requêtes identiques simultanées partagent le même appel (double rendu React, frappe rapide…).
  */
 export function cachedSearch(provider: string, rawQuery: string, ttlMs: number, run: () => Promise<string[]>) {
-  const query = rawQuery.trim().toLowerCase().replace(/\s+/g, ' ');
+  const query = normalize(rawQuery);
   const key = `${provider}:${query}`;
   const pending = inflight.get(key);
   if (pending) return pending;

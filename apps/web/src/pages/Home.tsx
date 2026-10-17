@@ -1,9 +1,11 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, type Album, type Artist, type Track } from '../api';
 import { AlbumCard, ArtistCard, GenreTiles, Grid } from '../components/Cards';
 import { Cover } from '../components/Cover';
 import { PlayIcon, SearchIcon } from '../components/icons';
 import { ErrorState, Loading } from '../components/States';
+import { TrackList } from '../components/TrackList';
 import { useAuth } from '../context/auth';
 import { usePlayer } from '../context/player';
 import { useAsync, useTitle } from '../hooks';
@@ -63,6 +65,8 @@ export function HomePage() {
         </Link>
       )}
 
+      {recent.length > 0 && <ForYou />}
+
       {recentAlbums.length > 0 && (
         <section className="section">
           <h2 className="section__title">Écoutés récemment</h2>
@@ -97,6 +101,40 @@ export function HomePage() {
         </section>
       )}
     </div>
+  );
+}
+
+const FOR_YOU_PREVIEW = 8;
+
+/** « Recommandé pour vous » : chargé à part, l'accueil s'affiche sans l'attendre. */
+function ForYou() {
+  const { playQueue } = usePlayer();
+  const [expanded, setExpanded] = useState(false);
+  const { data } = useAsync(() => api.recommendations(), []);
+  if (!data || data.tracks.length === 0) return null;
+
+  const names = data.basedOn;
+  const basis = names.length > 1 ? `${names.slice(0, -1).join(', ')} et ${names.at(-1)}` : names[0];
+  const shown = expanded ? data.tracks : data.tracks.slice(0, FOR_YOU_PREVIEW);
+
+  return (
+    <section className="section">
+      <div className="section__head for-you__head">
+        <div>
+          <h2 className="section__title">Recommandé pour vous</h2>
+          {basis && <p className="muted small for-you__basis">D’après vos écoutes de {basis}</p>}
+        </div>
+        <button className="btn btn--primary btn--with-icon" onClick={() => playQueue(data.tracks)}>
+          <PlayIcon size={16} /> Écouter le mix
+        </button>
+      </div>
+      <TrackList tracks={shown} />
+      {data.tracks.length > FOR_YOU_PREVIEW && (
+        <button className="link-btn for-you__more" onClick={() => setExpanded((v) => !v)}>
+          {expanded ? 'Afficher moins' : `Afficher les ${data.tracks.length} titres`}
+        </button>
+      )}
+    </section>
   );
 }
 

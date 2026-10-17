@@ -2,7 +2,7 @@ import { sql } from 'drizzle-orm';
 import { env } from '../config.js';
 import { db } from '../db/client.js';
 import { albums, artists, tracks } from '../db/schema.js';
-import { cachedSearch } from '../lib/search-cache.js';
+import { cachedSearch, isCached } from '../lib/search-cache.js';
 import { slugify } from '../lib/slug.js';
 
 /**
@@ -248,4 +248,7 @@ export async function searchYoutube(query: string, limit: number): Promise<strin
   return cachedSearch('youtube', `${query}|${limit}`, CACHE_TTL_MS, async () => upsertVideos(await fetchVideos(query, limit)));
 }
 
-export const videoIdOf = (externalId: string | null) => externalId?.match(/^youtube:([\w-]{11})$/)?.[1] ?? null;
+/** Vrai si `searchYoutube(query, limit)` serait servie par le cache, sans consommer de quota. */
+export const isYoutubeSearchCached = (query: string, limit: number) => isCached('youtube', `${query}|${limit}`, CACHE_TTL_MS);
+
+export const videoIdOf =(externalId: string | null) => externalId?.match(/^youtube:([\w-]{11})$/)?.[1] ?? null;

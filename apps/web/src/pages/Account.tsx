@@ -3,6 +3,7 @@ import { api } from '../api';
 import { IosInstallSteps } from '../components/InstallBanner';
 import { useAuth } from '../context/auth';
 import { useDialog } from '../context/dialog';
+import { usePlayer } from '../context/player';
 import { useToast } from '../context/toast';
 import { useTitle } from '../hooks';
 import { useInstall } from '../pwa';
@@ -13,6 +14,7 @@ export function AccountPage() {
   const toast = useToast();
   const dialog = useDialog();
   const install = useInstall();
+  const { autoplay, toggleAutoplay } = usePlayer();
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordBusy, setPasswordBusy] = useState(false);
   if (!user) return null;
@@ -79,6 +81,20 @@ export function AccountPage() {
             <button className="btn btn--primary" disabled={passwordBusy}>{passwordBusy ? '…' : 'Changer le mot de passe'}</button>
           </div>
         </form>
+      </section>
+
+      <section className="panel section">
+        <h2 className="section__title">Lecture</h2>
+        <div className="setting">
+          <div>
+            <strong>Lecture automatique</strong>
+            <p className="muted small">À la fin de la file d’attente, Velora enchaîne des titres recommandés d’après ce que vous écoutez.</p>
+          </div>
+          <button className={`switch ${autoplay ? 'switch--on' : ''}`} onClick={toggleAutoplay} role="switch" aria-checked={autoplay}
+            aria-label="Lecture automatique">
+            <span className="switch__track"><span className="switch__thumb" /></span>
+          </button>
+        </div>
       </section>
 
       <section className="section">
