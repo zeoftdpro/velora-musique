@@ -5,7 +5,8 @@ import { db } from '../db/client.js';
 import { albums, artists, genres, playlists, playlistTracks, tracks } from '../db/schema.js';
 import { forbidden, HttpError, notFound } from '../lib/errors.js';
 import { IdParams, parse } from '../lib/validation.js';
-import { toTrackDto, trackColumns } from '../services/catalog.js';
+import { toTrackDto, trackColumns, visibleTo } from '../services/catalog.js';
+import { deleteUploadedTrack } from '../services/uploads.js';
 
 const PlaylistBody = z.object({
   name: z.string().trim().min(1).max(100),
@@ -37,6 +38,7 @@ export default async function playlistRoutes(app: FastifyInstance) {
         name: playlists.name,
         description: playlists.description,
         isPublic: playlists.isPublic,
+        kind: playlists.kind,
         updatedAt: playlists.updatedAt,
         trackCount: count(playlistTracks.id),
       })
@@ -75,7 +77,8 @@ export default async function playlistRoutes(app: FastifyInstance) {
       .innerJoin(artists, eq(artists.id, tracks.artistId))
       .innerJoin(albums, eq(albums.id, tracks.albumId))
       .leftJoin(genres, eq(genres.id, tracks.genreId))
-      .where(and(eq(playlistTracks.playlistId, id), eq(tracks.status, 'ready')))
+      // Une playlist publique peut contenir des musiques téléversées : seul leur propriétaire les voit.
+      .where(and(eq(playlistTracks.playlistId, id), eq(tracks.status, 'ready'), visibleTo(tracks.ownerId, req.user?.sub)))
       .orderBy(asc(playlistTracks.position));
     return {
       ...playlist,
@@ -98,7 +101,10 @@ export default async function playlistRoutes(app: FastifyInstance) {
 
   app.delete('/playlists/:id', { preHandler: app.authenticate }, async (req, reply) => {
     const { id } = parse(IdParams, req.params);
-    await loadOwned(id, req.user.sub);
+    const playlist = await loadOwned(id, req.user.sub);
+    if (playlist.kind === 'uploads') {
+      throw new HttpError(409, 'Cette catégorie reçoit vos musiques téléversées : renommez-la ou retirez ses titres', 'UPLOADS_PLAYLIST');
+    }
     await db.delete(playlists).where(eq(playlists.id, id));
     reply.code(204);
   });
@@ -106,8 +112,12 @@ export default async function playlistRoutes(app: FastifyInstance) {
   app.post('/playlists/:id/tracks', { preHandler: app.authenticate }, async (req, reply) => {
     const { id } = parse(IdParams, req.params);
     const { trackId } = parse(AddTrackBody, req.body);
-    await loadOwned(id, req.user.sub);
-    const [track] = await db.select({ id: tracks.id }).from(tracks).where(eq(tracks.id, trackId));
+    const playlist = await loadOwned(id, req.user.sub);
+    if (playlist.kind === 'uploads') throw new HttpError(409, 'Cette catégorie ne reçoit que vos fichiers téléversés', 'UPLOADS_PLAYLIST');
+    const [track] = await db
+      .select({ id: tracks.id })
+      .from(tracks)
+      .where(and(eq(tracks.id, trackId), visibleTo(tracks.ownerId, req.user.sub)));
     if (!track) throw notFound('Titre');
 
     const item = await db.transaction(async (tx) => {
@@ -131,7 +141,19 @@ export default async function playlistRoutes(app: FastifyInstance) {
 
   app.delete('/playlists/:id/tracks/:itemId', { preHandler: app.authenticate }, async (req, reply) => {
     const { id, itemId } = parse(ItemParams, req.params);
-    await loadOwned(id, req.user.sub);
+    const playlist = await loadOwned(id, req.user.sub);
+    if (playlist.kind === 'uploads') {
+      // Retirer un titre de « Musiques téléversées » le supprime : il n'existe nulle part ailleurs.
+      const [item] = await db
+        .select({ trackId: playlistTracks.trackId })
+        .from(playlistTracks)
+        .where(and(eq(playlistTracks.id, itemId), eq(playlistTracks.playlistId, id)));
+      if (!item) throw notFound('Élément de playlist');
+      if (await deleteUploadedTrack(item.trackId, req.user.sub)) {
+        await touch(id);
+        return reply.code(204).send();
+      }
+    }
     await db.transaction(async (tx) => {
       const [removed] = await tx
         .delete(playlistTracks)

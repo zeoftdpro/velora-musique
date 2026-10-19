@@ -8,6 +8,7 @@ import { DialogProvider } from './context/dialog';
 import { LibraryProvider } from './context/library';
 import { PlayerProvider } from './context/player';
 import { ToastProvider } from './context/toast';
+import { UploadsProvider } from './context/uploads';
 import { AccountPage } from './pages/Account';
 import { AlbumPage } from './pages/Album';
 import { ArtistPage } from './pages/Artist';
@@ -31,9 +32,11 @@ function Protected() {
   if (!user) return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
   return (
     <LibraryProvider key={user.id}>
-      <PlayerProvider>
-        <Layout />
-      </PlayerProvider>
+      <UploadsProvider>
+        <PlayerProvider>
+          <Layout />
+        </PlayerProvider>
+      </UploadsProvider>
     </LibraryProvider>
   );
 }

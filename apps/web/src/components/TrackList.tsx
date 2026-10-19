@@ -18,10 +18,12 @@ type Props = {
   offset?: number;
   /** Actions propres aux playlists dont l'utilisateur est propriétaire. */
   onRemove?: (track: Row) => void;
+  /** Libellé de l'action de retrait (« Retirer de la playlist » par défaut). */
+  removeLabel?: string;
   onMove?: (track: Row, delta: -1 | 1) => void;
 };
 
-export function TrackList({ tracks, showAlbum = true, showCover = true, offset = 0, onRemove, onMove }: Props) {
+export function TrackList({ tracks, showAlbum = true, showCover = true, offset = 0, onRemove, removeLabel, onMove }: Props) {
   const { current, playing, playQueue, toggle } = usePlayer();
   const { favoriteIds, toggleFavorite } = useLibrary();
 
@@ -59,7 +61,7 @@ export function TrackList({ tracks, showAlbum = true, showCover = true, offset =
               <HeartIcon size={18} filled={liked} />
             </button>
             <span className="track__duration">{formatDuration(track.durationMs)}</span>
-            <TrackMenu track={track} index={i} count={tracks.length} onRemove={onRemove} onMove={onMove} />
+            <TrackMenu track={track} index={i} count={tracks.length} onRemove={onRemove} removeLabel={removeLabel} onMove={onMove} />
           </li>
         );
       })}
@@ -67,7 +69,7 @@ export function TrackList({ tracks, showAlbum = true, showCover = true, offset =
   );
 }
 
-function TrackMenu({ track, index, count, onRemove, onMove }: { track: Row; index: number; count: number } & Pick<Props, 'onRemove' | 'onMove'>) {
+function TrackMenu({ track, index, count, onRemove, removeLabel = 'Retirer de la playlist', onMove }: { track: Row; index: number; count: number } & Pick<Props, 'onRemove' | 'removeLabel' | 'onMove'>) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const { playNext, addToQueue } = usePlayer();
@@ -117,7 +119,7 @@ function TrackMenu({ track, index, count, onRemove, onMove }: { track: Row; inde
             <button role="menuitem" onClick={run(() => onMove(track, 1))}><DownIcon size={16} /> Descendre</button>
           )}
           {onRemove && (
-            <button role="menuitem" className="danger" onClick={run(() => onRemove(track))}><TrashIcon size={16} /> Retirer de la playlist</button>
+            <button role="menuitem" className="danger" onClick={run(() => onRemove(track))}><TrashIcon size={16} /> {removeLabel}</button>
           )}
         </div>
       )}

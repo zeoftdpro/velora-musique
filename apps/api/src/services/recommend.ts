@@ -2,7 +2,7 @@ import { and, desc, eq, gt, inArray, sql } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import { artists, favorites, playHistory, tracks } from '../db/schema.js';
 import { slugify } from '../lib/slug.js';
-import { selectTracks, toTrackDto, type TrackDto } from './catalog.js';
+import { selectTracks, toTrackDto, visibleTo, type TrackDto } from './catalog.js';
 import { relatedArtists } from './deezer.js';
 import { isYoutubeSearchCached, searchYoutube, youtubeEnabled } from './youtube.js';
 
@@ -230,13 +230,14 @@ async function relatedTracks(sources: ArtistWeight[]) {
 
 /**
  * Charge les titres les mieux classés, avec un peu de hasard (le mix change d'une fois sur l'autre) et au plus
- * `perArtist` titres par artiste tant que la liste peut être remplie autrement.
+ * `perArtist` titres par artiste tant que la liste peut être remplie autrement. Les musiques téléversées par
+ * d'autres comptes sont écartées ici (elles peuvent remonter via l'historique des autres).
  */
-async function pick(ranked: [string, number][], limit: number, perArtist: number): Promise<TrackDto[]> {
+async function pick(ranked: [string, number][], limit: number, perArtist: number, userId: string): Promise<TrackDto[]> {
   const top = ranked.slice(0, limit * 5);
   if (top.length === 0) return [];
   const score = new Map(top.map(([id, s]) => [id, s * (0.8 + Math.random() * 0.4)]));
-  const rows = (await selectTracks(inArray(tracks.id, [...score.keys()]))).sort((a, b) => score.get(b.id)! - score.get(a.id)!);
+  const rows = (await selectTracks(inArray(tracks.id, [...score.keys()]), userId)).sort((a, b) => score.get(b.id)! - score.get(a.id)!);
 
   const chosen: typeof rows = [];
   const perArtistCount = new Map<string, number>();
@@ -288,7 +289,7 @@ export async function recommendationsFor(userId: string, limit: number) {
   scores.add(pop, 0.1);
 
   const result = {
-    tracks: await pick(scores.ranked(profile.known), limit, 2),
+    tracks: await pick(scores.ranked(profile.known), limit, 2, userId),
     basedOn: profile.artists.slice(0, 3).map((a) => a.name),
   };
   forYouCache.set(userId, { at: Date.now(), result });
@@ -304,7 +305,7 @@ export async function radioAfter(userId: string, seedId: string, exclude: string
     .select({ id: tracks.id, artistId: artists.id, artistName: artists.name, genreId: tracks.genreId })
     .from(tracks)
     .innerJoin(artists, eq(artists.id, tracks.artistId))
-    .where(eq(tracks.id, seedId));
+    .where(and(eq(tracks.id, seedId), visibleTo(tracks.ownerId, userId)));
   if (!seed) return [];
 
   const profile = await profileOf(userId);
@@ -336,5 +337,5 @@ export async function radioAfter(userId: string, seedId: string, exclude: string
     .from(playHistory)
     .where(and(eq(playHistory.userId, userId), gt(playHistory.playedAt, new Date(Date.now() - 6 * 3600_000))));
   const excluded = new Set([seed.id, ...exclude, ...recent.map((r) => r.id)]);
-  return pick(scores.ranked(excluded), limit, 2);
+  return pick(scores.ranked(excluded), limit, 2, userId);
 }

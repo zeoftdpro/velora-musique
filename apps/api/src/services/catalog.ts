@@ -1,7 +1,15 @@
-import { and, eq, type SQL } from 'drizzle-orm';
+import { and, eq, isNull, or, type AnyColumn, type SQL } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import { albums, artists, genres, tracks } from '../db/schema.js';
 import { assetUrl } from '../lib/storage.js';
+
+/**
+ * Visibilité d'une ligne du catalogue (colonne owner_id) : le catalogue public pour tous, et en plus les musiques
+ * téléversées par `viewerId`. Sans `viewerId`, uniquement le catalogue public.
+ */
+export function visibleTo(ownerColumn: AnyColumn, viewerId?: string | null): SQL {
+  return viewerId ? or(isNull(ownerColumn), eq(ownerColumn, viewerId))! : isNull(ownerColumn);
+}
 
 /** Colonnes sélectionnées pour exposer un titre avec son artiste, son album et son genre. */
 export const trackColumns = {
@@ -54,15 +62,15 @@ export function toTrackDto(row: TrackRow) {
 }
 export type TrackDto = ReturnType<typeof toTrackDto>;
 
-/** Requête de base : titres prêts à la lecture, avec jointures catalogue. */
-export function selectTracks(where?: SQL) {
+/** Requête de base : titres prêts à la lecture et visibles de `viewerId`, avec jointures catalogue. */
+export function selectTracks(where?: SQL, viewerId?: string | null) {
   return db
     .select(trackColumns)
     .from(tracks)
     .innerJoin(artists, eq(artists.id, tracks.artistId))
     .innerJoin(albums, eq(albums.id, tracks.albumId))
     .leftJoin(genres, eq(genres.id, tracks.genreId))
-    .where(where ? and(eq(tracks.status, 'ready'), where) : eq(tracks.status, 'ready'))
+    .where(and(eq(tracks.status, 'ready'), visibleTo(tracks.ownerId, viewerId), where))
     .$dynamic();
 }
 
@@ -100,13 +108,14 @@ export function toAlbumDto(row: AlbumRow) {
   };
 }
 
-export function selectAlbums(where?: SQL) {
-  const q = db
+export function selectAlbums(where?: SQL, viewerId?: string | null) {
+  return db
     .select(albumColumns)
     .from(albums)
     .innerJoin(artists, eq(artists.id, albums.artistId))
-    .leftJoin(genres, eq(genres.id, albums.genreId));
-  return (where ? q.where(where) : q).$dynamic();
+    .leftJoin(genres, eq(genres.id, albums.genreId))
+    .where(and(visibleTo(albums.ownerId, viewerId), where))
+    .$dynamic();
 }
 
 export function toArtistDto(row: { id: string; name: string; imageKey: string | null; bio?: string | null }) {

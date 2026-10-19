@@ -7,6 +7,7 @@ import { env } from '../config.js';
 import { forbidden, notFound } from '../lib/errors.js';
 import { localStorage, PUBLIC_PREFIX, storage, verifyLocalSignature } from '../lib/storage.js';
 import { parse } from '../lib/validation.js';
+import { MAX_UPLOAD_BYTES } from '../services/uploads.js';
 
 const SignedQuery = z.object({ exp: z.coerce.number(), sig: z.string() });
 
@@ -39,6 +40,16 @@ export default async function fileRoutes(app: FastifyInstance) {
       const { exp, sig } = parse(SignedQuery, req.query);
       if (!verifyLocalSignature(key, exp, sig)) throw forbidden('Signature invalide ou expirée');
       return sendLocalFile(reply, key, 'private, max-age=3600');
+    });
+
+    // Réception des musiques téléversées (équivalent de l'URL d'envoi pré-signée S3).
+    app.addContentTypeParser('*', { parseAs: 'buffer', bodyLimit: MAX_UPLOAD_BYTES + 1024 * 1024 }, (_req, body, done) => done(null, body));
+    app.put('/files/*', { bodyLimit: MAX_UPLOAD_BYTES + 1024 * 1024 }, async (req, reply) => {
+      const key = (req.params as { '*': string })['*'];
+      const { exp, sig } = parse(SignedQuery, req.query);
+      if (!key.startsWith('uploads/') || !verifyLocalSignature(key, exp, sig)) throw forbidden('Signature invalide ou expirée');
+      await localStorage.put(key, req.body as Buffer);
+      reply.code(200).send();
     });
   }
 }

@@ -6,7 +6,7 @@ import { favorites, playHistory, tracks, users } from '../db/schema.js';
 import { notFound } from '../lib/errors.js';
 import { IdParams, Pagination, parse } from '../lib/validation.js';
 import { publicUser } from '../services/auth.js';
-import { selectTracks, toTrackDto } from '../services/catalog.js';
+import { selectTracks, toTrackDto, visibleTo } from '../services/catalog.js';
 import { radioAfter, recommendationsFor } from '../services/recommend.js';
 
 const UpdateProfile = z.object({ displayName: z.string().trim().min(1).max(60) });
@@ -43,7 +43,7 @@ export default async function meRoutes(app: FastifyInstance) {
 
   app.get('/me/favorites', async (req) => {
     const { limit, offset } = parse(Pagination, req.query);
-    const rows = await selectTracks()
+    const rows = await selectTracks(undefined, req.user.sub)
       .innerJoin(favorites, and(eq(favorites.trackId, tracks.id), eq(favorites.userId, req.user.sub)))
       .orderBy(desc(favorites.createdAt))
       .limit(limit)
@@ -58,7 +58,10 @@ export default async function meRoutes(app: FastifyInstance) {
 
   app.put('/me/favorites/:id', async (req, reply) => {
     const { id } = parse(IdParams, req.params);
-    const [track] = await db.select({ id: tracks.id }).from(tracks).where(eq(tracks.id, id));
+    const [track] = await db
+      .select({ id: tracks.id })
+      .from(tracks)
+      .where(and(eq(tracks.id, id), visibleTo(tracks.ownerId, req.user.sub)));
     if (!track) throw notFound('Titre');
     await db.insert(favorites).values({ userId: req.user.sub, trackId: id }).onConflictDoNothing();
     reply.code(204);
@@ -74,7 +77,7 @@ export default async function meRoutes(app: FastifyInstance) {
 
   app.get('/me/history', async (req) => {
     const { limit } = parse(Pagination, req.query);
-    const rows = await selectTracks()
+    const rows = await selectTracks(undefined, req.user.sub)
       .innerJoin(playHistory, and(eq(playHistory.trackId, tracks.id), eq(playHistory.userId, req.user.sub)))
       .orderBy(desc(playHistory.playedAt))
       .limit(limit);

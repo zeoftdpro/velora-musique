@@ -41,6 +41,8 @@ export const MaximizeIcon = (p: IconProps) => <Icon {...p}><path d="M15 3h6v6M9 
 /** Bouton Partager d'iOS : carré ouvert surmonté d'une flèche. */
 export const ShareIcon = (p: IconProps) => <Icon {...p}><path d="M12 3v12M8 7l4-4 4 4M8 11H6v10h12V11h-2" /></Icon>;
 export const DownloadIcon =(p: IconProps) => <Icon {...p}><path d="M12 4v11M7 10l5 5 5-5M5 20h14" /></Icon>;
+export const UploadIcon = (p: IconProps) => <Icon {...p}><path d="M12 15V4M7 9l5-5 5 5M5 20h14" /></Icon>;
+export const CheckIcon = (p: IconProps) => <Icon {...p}><path d="M5 12.5l4.5 4.5L19 7.5" /></Icon>;
 export const VideoIcon = (p: IconProps) => <Icon {...p}><rect x="3" y="6" width="13" height="12" rx="2" /><path d="M16 10.5l5-3v9l-5-3z" /></Icon>;
 export const EyeOffIcon = (p: IconProps) => <Icon {...p}><path d="M3 3l18 18M10.6 6.1A9.8 9.8 0 0 1 12 6c5 0 9 6 9 6a17 17 0 0 1-2.6 3.2M6.5 7.6C4.3 9.1 3 12 3 12s4 6 9 6c1.6 0 3-.4 4.3-1.1M9.9 9.9a3 3 0 0 0 4.2 4.2" /></Icon>;
 export const ListPlusIcon = (p: IconProps) => <Icon {...p}><path d="M4 6h11M4 12h11M4 18h7M18 15v6M15 18h6" /></Icon>;

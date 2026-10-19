@@ -13,12 +13,12 @@ declare module 'fastify' {
 }
 
 /**
- * IP du visiteur. Derrière le relais Netlify, X-Forwarded-For commence par ce que le client a bien voulu
- * envoyer : l'en-tête posé par Netlify lui-même fait foi. À défaut (développement local), l'IP de connexion.
+ * IP du visiteur. X-Forwarded-For peut commencer par ce que le client a bien voulu envoyer : l'en-tête posé par
+ * l'hébergeur lui-même fait foi (Vercel, ou l'ancien relais Netlify). À défaut (développement local), l'IP de connexion.
  */
 function clientIp(req: FastifyRequest) {
-  const fromNetlify = req.headers['x-nf-client-connection-ip'];
-  return (typeof fromNetlify === 'string' && fromNetlify) || req.ip;
+  const fromHost = process.env.VERCEL ? req.headers['x-vercel-forwarded-for'] : req.headers['x-nf-client-connection-ip'];
+  return (typeof fromHost === 'string' && fromHost.split(',')[0]!.trim()) || req.ip;
 }
 
 /** Vérifie l'en-tête x-nf-sign (JWS HS256) ajouté par Netlify aux requêtes relayées par une redirection « signed ». */

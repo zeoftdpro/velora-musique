@@ -3,7 +3,7 @@ import { Meilisearch } from 'meilisearch';
 import { env } from '../config.js';
 import { db } from '../db/client.js';
 import { albums, artists, genres, tracks } from '../db/schema.js';
-import { selectAlbums, selectTracks, toAlbumDto, toArtistDto, toTrackDto } from './catalog.js';
+import { selectAlbums, selectTracks, toAlbumDto, toArtistDto, toTrackDto, visibleTo } from './catalog.js';
 import { searchJamendo } from './jamendo.js';
 import { searchYoutube, youtubeEnabled, YoutubeQuotaError } from './youtube.js';
 
@@ -71,7 +71,9 @@ export async function indexCatalog(trackIds?: string[]) {
 /** Échappe une valeur pour un filtre Meilisearch. */
 const quote = (v: string) => `"${v.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 
-export async function search(q: string, opts: { genre?: string; limit: number }) {
+type SearchOptions = { genre?: string; limit: number; /** Inclut aussi les musiques téléversées par ce compte. */ viewerId?: string };
+
+export async function search(q: string, opts: SearchOptions) {
   const [local, jamendoIds] = await Promise.all([
     searchLocal(q, opts),
     // Le catalogue externe est un complément : en cas d'indisponibilité, on renvoie les résultats locaux.
@@ -87,15 +89,15 @@ export async function search(q: string, opts: { genre?: string; limit: number })
   const unique = (ids: string[]) => [...new Set(ids)];
 
   const trackIds = unique([...local.tracks, ...jamendoIds]);
-  const trackRows = byOrder(trackIds.length ? await selectTracks(inArray(tracks.id, trackIds)) : [], trackIds);
+  const trackRows = byOrder(trackIds.length ? await selectTracks(inArray(tracks.id, trackIds), opts.viewerId) : [], trackIds);
 
   // Les albums et artistes des titres Jamendo complètent ceux trouvés localement.
   const external = trackRows.filter((t) => jamendoIds.includes(t.id));
   const albumIds = unique([...local.albums, ...external.map((t) => t.albumId)]).slice(0, 10);
   const artistIds = unique([...local.artists, ...external.map((t) => t.artistId)]).slice(0, 10);
   const [albumRows, artistRows] = await Promise.all([
-    albumIds.length ? selectAlbums(inArray(albums.id, albumIds)) : [],
-    artistIds.length ? db.select().from(artists).where(inArray(artists.id, artistIds)) : [],
+    albumIds.length ? selectAlbums(inArray(albums.id, albumIds), opts.viewerId) : [],
+    artistIds.length ? db.select().from(artists).where(and(inArray(artists.id, artistIds), visibleTo(artists.ownerId, opts.viewerId))) : [],
   ]);
 
   return {
@@ -124,7 +126,7 @@ export async function searchWeb(q: string, limit: number) {
   }
 }
 
-async function searchLocal(q: string, opts: { genre?: string; limit: number }) {
+async function searchLocal(q: string, opts: SearchOptions) {
   if (!meili) return searchPostgres(q, opts);
   try {
     return await searchMeili(q, opts);
@@ -147,20 +149,21 @@ async function searchMeili(q: string, { genre, limit }: { genre?: string; limit:
   return { tracks: idsOf(0), albums: idsOf(1), artists: idsOf(2) };
 }
 
-async function searchPostgres(q: string, { genre, limit }: { genre?: string; limit: number }) {
+async function searchPostgres(q: string, { genre, limit, viewerId }: SearchOptions) {
   const pattern = `%${q.replace(/[%_\\]/g, (c) => `\\${c}`)}%`;
   const genreFilter = genre ? sql`${genres.slug} = ${genre}` : undefined;
 
   const trackRows = await selectTracks(
     and(or(ilike(tracks.title, pattern), ilike(artists.name, pattern), ilike(albums.title, pattern)), genreFilter),
+    viewerId,
   ).limit(limit);
-  const albumRows = await selectAlbums(and(or(ilike(albums.title, pattern), ilike(artists.name, pattern)), genreFilter)).limit(
+  const albumRows = await selectAlbums(and(or(ilike(albums.title, pattern), ilike(artists.name, pattern)), genreFilter), viewerId).limit(
     Math.min(limit, 10),
   );
   const artistRows = await db
     .select({ id: artists.id })
     .from(artists)
-    .where(ilike(artists.name, pattern))
+    .where(and(ilike(artists.name, pattern), visibleTo(artists.ownerId, viewerId)))
     .limit(Math.min(limit, 10));
 
   return {

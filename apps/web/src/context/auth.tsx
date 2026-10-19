@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { api, keepServerAwake, onUnauthorized, refreshSession, setAccessToken, type Session, type User } from '../api';
+import { api, onUnauthorized, refreshSession, setAccessToken, type Session, type User } from '../api';
 
 type AuthState = {
   user: User | null;
@@ -31,14 +31,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setAccessToken(null);
       setUser(null);
     });
-    // Réveille d'abord le serveur (requête réessayable) : le rafraîchissement de session, lui, n'est pas rejoué.
-    api
-      .health()
-      .catch(() => undefined)
-      .then(() => refreshSession())
+    refreshSession()
       .then((s) => s && applySession(s))
       .finally(() => setReady(true));
-    return keepServerAwake();
   }, [applySession]);
 
   // Rafraîchit le jeton d'accès un peu avant son expiration.

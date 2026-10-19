@@ -9,6 +9,7 @@ import { storage } from '../lib/storage.js';
 import { IdParams, parse } from '../lib/validation.js';
 import { availableVariants, VARIANTS, type VariantName } from '../lib/variants.js';
 import type { StreamTokenPayload } from '../plugins/auth.js';
+import { visibleTo } from '../services/catalog.js';
 import { videoIdOf } from '../services/youtube.js';
 
 // Cache mémoire des playlists de média (immuables une fois encodées).
@@ -44,7 +45,7 @@ export default async function streamRoutes(app: FastifyInstance) {
     const [track] = await db
       .select({ id: tracks.id, variants: tracks.variants, audioUrl: tracks.audioUrl, externalId: tracks.externalId })
       .from(tracks)
-      .where(and(eq(tracks.id, id), eq(tracks.status, 'ready')));
+      .where(and(eq(tracks.id, id), eq(tracks.status, 'ready'), visibleTo(tracks.ownerId, req.user.sub)));
     if (!track) throw notFound('Titre');
 
     // Titre YouTube : lu par le lecteur YouTube officiel intégré côté client, à partir de l'id de la vidéo.

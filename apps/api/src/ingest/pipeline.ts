@@ -9,7 +9,7 @@ import { db } from '../db/client.js';
 import { albums, artists, genres, tracks } from '../db/schema.js';
 import { slugify } from '../lib/slug.js';
 import { storage } from '../lib/storage.js';
-import { VARIANTS, type VariantName } from '../lib/variants.js';
+import type { VariantName } from '../lib/variants.js';
 import { runFfmpeg } from './ffmpeg.js';
 
 export const AUDIO_EXTENSIONS = new Set(['.mp3', '.flac', '.wav', '.m4a', '.aac', '.ogg', '.opus', '.aiff', '.wma']);
@@ -17,7 +17,17 @@ const SIDE_COVERS = ['cover.jpg', 'cover.jpeg', 'cover.png', 'folder.jpg', 'fold
 
 /** Durée cible d'un segment HLS (secondes) : compromis entre démarrage rapide et nombre de requêtes. */
 const SEGMENT_SECONDS = 6;
-const ENCODED_VARIANTS = Object.keys(VARIANTS) as VariantName[];
+// Catalogue : plusieurs débits, le lecteur choisit selon la connexion. Téléversements : un seul, pour économiser l'espace.
+const CATALOG_VARIANTS: VariantName[] = ['64k', '128k', '256k'];
+const UPLOAD_VARIANTS: VariantName[] = ['192k'];
+
+/** Options d'ingestion. Avec `ownerId`, le titre (et son artiste, son album) n'est visible que de ce compte. */
+export type IngestOptions = {
+  force?: boolean;
+  ownerId?: string;
+  /** Nom d'origine du fichier (téléversement) : sert de titre si le fichier n'a pas de métadonnées. */
+  originalName?: string;
+};
 
 export type IngestResult =
   | { status: 'ingested'; trackId: string; title: string }
@@ -42,15 +52,16 @@ async function upsertGenre(name: string | undefined) {
   return g?.id ?? null;
 }
 
-async function upsertArtist(name: string) {
-  const slug = slugify(name);
-  await db.insert(artists).values({ name, slug }).onConflictDoNothing();
+// Un artiste téléversé appartient à son compte (slug préfixé) : il ne se mélange jamais au catalogue public.
+async function upsertArtist(name: string, ownerId: string | null) {
+  const slug = ownerId ? `u-${ownerId}-${slugify(name)}` : slugify(name);
+  await db.insert(artists).values({ name, slug, ownerId }).onConflictDoNothing();
   const [a] = await db.select({ id: artists.id }).from(artists).where(eq(artists.slug, slug));
   return a!.id;
 }
 
-async function upsertAlbum(title: string, artistId: string, genreId: number | null, releaseYear?: number) {
-  await db.insert(albums).values({ title, artistId, genreId, releaseYear }).onConflictDoNothing();
+async function upsertAlbum(title: string, artistId: string, genreId: number | null, releaseYear: number | undefined, ownerId: string | null) {
+  await db.insert(albums).values({ title, artistId, genreId, releaseYear, ownerId }).onConflictDoNothing();
   const [a] = await db
     .select({ id: albums.id, coverKey: albums.coverKey })
     .from(albums)
@@ -112,8 +123,11 @@ async function uploadDir(localDir: string, prefix: string) {
   }
 }
 
-export async function ingestFile(file: string, opts: { force?: boolean } = {}): Promise<IngestResult> {
-  const sourceHash = await hashFile(file);
+export async function ingestFile(file: string, opts: IngestOptions = {}): Promise<IngestResult> {
+  const ownerId = opts.ownerId ?? null;
+  // Téléversement : l'empreinte inclut le compte, pour que deux personnes puissent envoyer le même fichier.
+  const fileHash = await hashFile(file);
+  const sourceHash = ownerId ? createHash('sha256').update(`${ownerId}:${fileHash}`).digest('hex') : fileHash;
   const [existing] = await db
     .select({ id: tracks.id, title: tracks.title, status: tracks.status })
     .from(tracks)
@@ -122,16 +136,18 @@ export async function ingestFile(file: string, opts: { force?: boolean } = {}): 
 
   const meta = await parseFile(file, { duration: true });
   const c = meta.common;
-  const folder = path.basename(path.dirname(file));
-  const title = c.title?.trim() || path.basename(file, path.extname(file)).replace(/^\d+[\s.-]+/, '');
+  const fileName = opts.originalName ?? path.basename(file);
+  // Le dossier d'un téléversement est temporaire : son nom ne veut rien dire.
+  const folder = ownerId ? null : path.basename(path.dirname(file));
+  const title = c.title?.trim() || path.basename(fileName, path.extname(fileName)).replace(/^\d+[\s.-]+/, '').trim() || 'Sans titre';
   const artistName = (c.albumartist || c.artist)?.trim() || 'Artiste inconnu';
   const trackArtistName = c.artist?.trim() || artistName;
   const albumTitle = c.album?.trim() || folder || 'Single';
 
   const genreId = await upsertGenre(c.genre?.[0]);
-  const albumArtistId = await upsertArtist(artistName);
-  const trackArtistId = trackArtistName === artistName ? albumArtistId : await upsertArtist(trackArtistName);
-  const album = await upsertAlbum(albumTitle, albumArtistId, genreId, c.year);
+  const albumArtistId = await upsertArtist(artistName, ownerId);
+  const trackArtistId = trackArtistName === artistName ? albumArtistId : await upsertArtist(trackArtistName, ownerId);
+  const album = await upsertAlbum(albumTitle, albumArtistId, genreId, c.year, ownerId);
 
   if (!album.coverKey) {
     const cover = await findCover(file, meta);
@@ -152,6 +168,7 @@ export async function ingestFile(file: string, opts: { force?: boolean } = {}): 
     durationMs: Math.round((meta.format.duration ?? 0) * 1000),
     status: 'processing' as const,
     sourceHash,
+    ownerId,
   };
   const [track] = existing
     ? await db.update(tracks).set(values).where(eq(tracks.id, existing.id)).returning({ id: tracks.id })
@@ -161,13 +178,14 @@ export async function ingestFile(file: string, opts: { force?: boolean } = {}): 
   const workDir = await mkdtemp(path.join(os.tmpdir(), 'velora-hls-'));
   try {
     const hlsPrefix = `tracks/${trackId}`;
-    for (const variant of ENCODED_VARIANTS) {
+    const variants = ownerId ? UPLOAD_VARIANTS : CATALOG_VARIANTS;
+    for (const variant of variants) {
       const dir = await encodeVariant(file, workDir, variant);
       await uploadDir(dir, `${hlsPrefix}/${variant}`);
     }
     await db
       .update(tracks)
-      .set({ hlsPrefix, variants: ENCODED_VARIANTS, status: 'ready' })
+      .set({ hlsPrefix, variants, status: 'ready' })
       .where(eq(tracks.id, trackId));
     return { status: 'ingested', trackId, title };
   } catch (err) {

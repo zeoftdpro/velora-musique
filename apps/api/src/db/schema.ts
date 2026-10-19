@@ -58,8 +58,10 @@ export const artists = pgTable('artists', {
   imageKey: text('image_key'),
   // Identifiant dans un catalogue externe, ex. 'jamendo:1234' ; null pour le catalogue local.
   externalId: text('external_id').unique(),
+  // Artiste créé par un téléversement : visible de son seul propriétaire. Null = catalogue public.
+  ownerId: uuid('owner_id').references(() => users.id, { onDelete: 'cascade' }),
   createdAt: createdAt(),
-});
+}, (t) => [index('artists_owner_idx').on(t.ownerId)]);
 
 export const albums = pgTable('albums', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -70,10 +72,12 @@ export const albums = pgTable('albums', {
   // Clé de stockage, ou URL absolue pour une pochette hébergée par un catalogue externe.
   coverKey: text('cover_key'),
   externalId: text('external_id').unique(),
+  ownerId: uuid('owner_id').references(() => users.id, { onDelete: 'cascade' }),
   createdAt: createdAt(),
 }, (t) => [
   uniqueIndex('albums_artist_title_unique').on(t.artistId, t.title),
   index('albums_genre_idx').on(t.genreId),
+  index('albums_owner_idx').on(t.ownerId),
 ]);
 
 export const tracks = pgTable('tracks', {
@@ -95,8 +99,11 @@ export const tracks = pgTable('tracks', {
   audioUrl: text('audio_url'),
   // Empreinte SHA-256 du fichier source : rend l'ingestion idempotente.
   sourceHash: text('source_hash').notNull().unique(),
+  // Titre téléversé par un utilisateur : lui seul peut le voir et l'écouter. Null = catalogue public.
+  ownerId: uuid('owner_id').references(() => users.id, { onDelete: 'cascade' }),
   createdAt: createdAt(),
 }, (t) => [
+  index('tracks_owner_idx').on(t.ownerId),
   index('tracks_album_idx').on(t.albumId, t.discNumber, t.trackNumber),
   index('tracks_artist_idx').on(t.artistId),
   index('tracks_genre_idx').on(t.genreId),
@@ -112,9 +119,14 @@ export const playlists = pgTable('playlists', {
   name: text('name').notNull(),
   description: text('description'),
   isPublic: boolean('is_public').notNull().default(false),
+  // 'uploads' : catégorie « Musiques téléversées », une par compte, qui reçoit les fichiers envoyés.
+  kind: text('kind'),
   createdAt: createdAt(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [index('playlists_owner_idx').on(t.ownerId)]);
+}, (t) => [
+  index('playlists_owner_idx').on(t.ownerId),
+  uniqueIndex('playlists_owner_kind_unique').on(t.ownerId, t.kind),
+]);
 
 export const playlistTracks = pgTable('playlist_tracks', {
   id: uuid('id').primaryKey().defaultRandom(),

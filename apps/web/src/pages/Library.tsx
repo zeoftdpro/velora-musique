@@ -1,11 +1,12 @@
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { BigPlayButton, Hero } from '../components/Hero';
-import { HeartIcon, PlusIcon } from '../components/icons';
+import { HeartIcon, MusicIcon, PlusIcon, UploadIcon } from '../components/icons';
 import { ErrorState, Loading } from '../components/States';
 import { TrackList } from '../components/TrackList';
 import { useDialog } from '../context/dialog';
 import { useLibrary } from '../context/library';
+import { useUploads } from '../context/uploads';
 import { useAsync, useTitle } from '../hooks';
 import { usePlayList } from './Album';
 
@@ -21,6 +22,7 @@ function Tabs() {
 export function LibraryPage() {
   useTitle('Bibliothèque');
   const { playlists, createPlaylist, favoriteIds } = useLibrary();
+  const { pickFiles } = useUploads();
   const navigate = useNavigate();
   const dialog = useDialog();
 
@@ -42,11 +44,17 @@ export function LibraryPage() {
           <span>{favoriteIds.size} titre{favoriteIds.size > 1 ? 's' : ''}</span>
         </Link>
         {playlists.map((p) => (
-          <Link key={p.id} to={`/playlist/${p.id}`} className="playlist-tile">
+          <Link key={p.id} to={`/playlist/${p.id}`} className={`playlist-tile ${p.kind === 'uploads' ? 'playlist-tile--uploads' : ''}`}>
+            {p.kind === 'uploads' && <MusicIcon size={28} />}
             <strong>{p.name}</strong>
             <span>{p.trackCount} titre{p.trackCount > 1 ? 's' : ''}{p.isPublic ? ' · publique' : ''}</span>
           </Link>
         ))}
+        <button className="playlist-tile playlist-tile--new" onClick={pickFiles}>
+          <UploadIcon size={28} />
+          <strong>Téléverser des musiques</strong>
+          <span>MP3, M4A, FLAC… depuis ce téléphone ou cet ordinateur</span>
+        </button>
         <button className="playlist-tile playlist-tile--new" onClick={create}>
           <PlusIcon size={28} />
           <strong>Nouvelle playlist</strong>

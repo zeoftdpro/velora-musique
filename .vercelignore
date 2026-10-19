@@ -1,4 +1,4 @@
-# Envoyé à Vercel par « vercel deploy » : seul le site (apps/web) est construit là-bas.
+# Envoyé à Vercel par « vercel deploy » : le site (apps/web) et l'API (apps/api, fonction api/index.mjs) y sont construits.
 music/
 storage/
 .pgdata/

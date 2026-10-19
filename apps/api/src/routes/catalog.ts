@@ -5,7 +5,7 @@ import { db } from '../db/client.js';
 import { albums, artists, genres, playHistory, tracks } from '../db/schema.js';
 import { notFound } from '../lib/errors.js';
 import { IdParams, Pagination, parse } from '../lib/validation.js';
-import { selectAlbums, selectTracks, toAlbumDto, toArtistDto, toTrackDto } from '../services/catalog.js';
+import { selectAlbums, selectTracks, toAlbumDto, toArtistDto, toTrackDto, visibleTo } from '../services/catalog.js';
 import { syncFromJamendo } from '../services/jamendo.js';
 import { search, searchWeb } from '../services/search.js';
 
@@ -27,7 +27,7 @@ export default async function catalogRoutes(app: FastifyInstance) {
     return db
       .select({ id: genres.id, name: genres.name, slug: genres.slug, trackCount: count(tracks.id) })
       .from(genres)
-      .leftJoin(tracks, sql`${tracks.genreId} = ${genres.id} and ${tracks.status} = 'ready'`)
+      .leftJoin(tracks, sql`${tracks.genreId} = ${genres.id} and ${tracks.status} = 'ready' and ${tracks.ownerId} is null`)
       .groupBy(genres.id)
       .orderBy(asc(genres.name));
   });
@@ -41,12 +41,14 @@ export default async function catalogRoutes(app: FastifyInstance) {
     return rows.map(toAlbumDto);
   });
 
-  app.get('/albums/:id', async (req) => {
+  // Connexion facultative : le propriétaire voit aussi les albums de ses musiques téléversées.
+  app.get('/albums/:id', { preHandler: app.optionalAuth }, async (req) => {
     const { id } = parse(IdParams, req.params);
-    const [album] = await selectAlbums(eq(albums.id, id));
+    const viewer = req.user?.sub;
+    const [album] = await selectAlbums(eq(albums.id, id), viewer);
     if (!album) throw notFound('Album');
     await syncFromJamendo('album', album.externalId);
-    const trackRows = await selectTracks(eq(tracks.albumId, id)).orderBy(asc(tracks.discNumber), asc(tracks.trackNumber), asc(tracks.title));
+    const trackRows = await selectTracks(eq(tracks.albumId, id), viewer).orderBy(asc(tracks.discNumber), asc(tracks.trackNumber), asc(tracks.title));
     return { ...toAlbumDto(album), tracks: trackRows.map(toTrackDto) };
   });
 
@@ -55,23 +57,24 @@ export default async function catalogRoutes(app: FastifyInstance) {
     const rows = await db
       .select()
       .from(artists)
-      .where(source === 'local' ? isNull(artists.externalId) : undefined)
+      .where(and(isNull(artists.ownerId), source === 'local' ? isNull(artists.externalId) : undefined))
       .orderBy(asc(artists.name))
       .limit(limit)
       .offset(offset);
     return rows.map(toArtistDto);
   });
 
-  app.get('/artists/:id', async (req) => {
+  app.get('/artists/:id', { preHandler: app.optionalAuth }, async (req) => {
     const { id } = parse(IdParams, req.params);
-    const [artist] = await db.select().from(artists).where(eq(artists.id, id));
+    const viewer = req.user?.sub;
+    const [artist] = await db.select().from(artists).where(and(eq(artists.id, id), visibleTo(artists.ownerId, viewer)));
     if (!artist) throw notFound('Artiste');
     await syncFromJamendo('artist', artist.externalId);
 
     const [albumRows, topTracks] = await Promise.all([
-      selectAlbums(eq(albums.artistId, id)).orderBy(desc(albums.releaseYear)),
+      selectAlbums(eq(albums.artistId, id), viewer).orderBy(desc(albums.releaseYear)),
       // Titres les plus écoutés de l'artiste.
-      selectTracks(eq(tracks.artistId, id))
+      selectTracks(eq(tracks.artistId, id), viewer)
         .leftJoin(playHistory, eq(playHistory.trackId, tracks.id))
         .groupBy(tracks.id, artists.id, albums.id, genres.id)
         .orderBy(desc(count(playHistory.id)), asc(tracks.title))
@@ -89,17 +92,17 @@ export default async function catalogRoutes(app: FastifyInstance) {
     return rows.map(toTrackDto);
   });
 
-  app.get('/tracks/:id', async (req) => {
+  app.get('/tracks/:id', { preHandler: app.optionalAuth }, async (req) => {
     const { id } = parse(IdParams, req.params);
-    const [row] = await selectTracks(eq(tracks.id, id));
+    const [row] = await selectTracks(eq(tracks.id, id), req.user?.sub);
     if (!row) throw notFound('Titre');
     return toTrackDto(row);
   });
 
-  app.get('/search', async (req) => {
+  app.get('/search', { preHandler: app.optionalAuth }, async (req) => {
     const { q, genre, limit } = parse(SearchQuery, req.query);
     if (!q && !genre) return { tracks: [], albums: [], artists: [] };
-    return search(q, { genre, limit });
+    return search(q, { genre, limit, viewerId: req.user?.sub });
   });
 
   // Réservé aux utilisateurs connectés et limité : chaque requête non mise en cache consomme du quota YouTube.

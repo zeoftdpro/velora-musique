@@ -31,7 +31,8 @@ export function PlaylistMenuItems({ track, onDone }: { track: Track; onDone: () 
       })}>
         <PlusIcon size={16} /> Nouvelle playlist…
       </button>
-      {playlists.map((p) => (
+      {/* « Musiques téléversées » ne reçoit que des fichiers envoyés. */}
+      {playlists.filter((p) => p.kind !== 'uploads').map((p) => (
         <button key={p.id} role="menuitem" onClick={run(() => addToPlaylist(p.id, track.id))}>{p.name}</button>
       ))}
     </>

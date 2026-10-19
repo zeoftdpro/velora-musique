@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
@@ -5,6 +6,7 @@ import { sql } from 'drizzle-orm';
 import { ZodError } from 'zod';
 import { env } from './config.js';
 import { db } from './db/client.js';
+import { ffmpegPath } from './ingest/ffmpeg.js';
 import { HttpError } from './lib/errors.js';
 import authPlugin from './plugins/auth.js';
 import securityPlugin from './plugins/security.js';
@@ -14,6 +16,7 @@ import fileRoutes from './routes/files.js';
 import meRoutes from './routes/me.js';
 import playlistRoutes from './routes/playlists.js';
 import streamRoutes from './routes/stream.js';
+import uploadRoutes from './routes/uploads.js';
 import { meili } from './services/search.js';
 
 export async function buildApp() {
@@ -68,6 +71,14 @@ export async function buildApp() {
     );
     checks.search = meili ? await meili.health().then((h) => h.status, () => 'down') : 'postgres-fallback';
     checks.storage = env.STORAGE_DRIVER;
+    // Indispensable à la conversion des musiques téléversées.
+    checks.ffmpeg = (() => {
+      try {
+        return existsSync(ffmpegPath()) ? 'ok' : 'missing';
+      } catch {
+        return 'missing';
+      }
+    })();
     return { status: checks.database === 'ok' ? 'ok' : 'degraded', checks };
   });
 
@@ -77,6 +88,7 @@ export async function buildApp() {
   await app.register(playlistRoutes);
   await app.register(streamRoutes);
   await app.register(fileRoutes);
+  await app.register(uploadRoutes);
 
   return app;
 }

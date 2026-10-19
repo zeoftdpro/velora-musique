@@ -9,9 +9,9 @@ export const API_URL = CONFIGURED_API_URL ?? `${window.location.protocol}//${win
  * appellerait « ton-site:4000 », qui n'existe pas, et resterait bloqué jusqu'à l'expiration du navigateur.
  */
 export const API_CONFIGURED = Boolean(CONFIGURED_API_URL) || isLocalPage;
-// Large : un serveur gratuit en veille (Render) met jusqu'à une minute à se réveiller.
-const REQUEST_TIMEOUT_MS = 60_000;
-const MAX_RETRIES = 4; // 2 + 4 + 8 + 16 s : couvre le réveil d'un serveur Render gratuit (~50 s)
+// L'API tourne sur Vercel (pas de mise en veille) : un échec passager se rattrape en quelques secondes.
+const REQUEST_TIMEOUT_MS = 30_000;
+const MAX_RETRIES = 2; // 1 + 2 s
 const RETRY_STATUSES = new Set([502, 503, 504]);
 
 // ---------------------------------------------------------------------------
@@ -44,7 +44,16 @@ export type Album = {
 export type AlbumDetail = Album & { tracks: Track[] };
 export type Artist = { id: string; name: string; bio: string | null; imageUrl: string | null };
 export type ArtistDetail = Artist & { albums: Album[]; topTracks: Track[] };
-export type PlaylistSummary = { id: string; name: string; description: string | null; isPublic: boolean; trackCount: number };
+export type PlaylistSummary = {
+  id: string;
+  name: string;
+  description: string | null;
+  isPublic: boolean;
+  trackCount: number;
+  /** 'uploads' : catégorie qui reçoit les musiques téléversées. */
+  kind: 'uploads' | null;
+};
+export type UploadTicket = { id: string; uploadUrl: string; contentType: string };
 export type PlaylistDetail = PlaylistSummary & { isOwner: boolean; tracks: (Track & { itemId: string })[] };
 export type SearchResults = { tracks: Track[]; albums: Album[]; artists: Artist[] };
 export type WebSearchResults = { status: 'ok' | 'disabled' | 'quota' | 'error'; tracks: Track[] };
@@ -79,8 +88,8 @@ async function raw<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (!API_CONFIGURED) {
     throw new ApiError(0, 'Ce site n’est relié à aucun serveur Velora (variable VITE_API_URL manquante).');
   }
-  // Serveur gratuit en veille (Render) : le relais Netlify abandonne (502/504) avant la fin du réveil.
-  // Les requêtes sans effet de bord en cas de doublon sont donc réessayées, avec une attente croissante.
+  // Erreur passagère (502/503/504, réseau) : les requêtes sans effet de bord en cas de doublon sont réessayées,
+  // avec une attente croissante.
   const retryable = ['GET', 'HEAD', 'PUT', 'DELETE'].includes((init.method ?? 'GET').toUpperCase());
   let res: Response | null = null;
   for (let attempt = 0; ; attempt++) {
@@ -92,7 +101,7 @@ async function raw<T>(path: string, init: RequestInit = {}): Promise<T> {
     }
     if (res && !RETRY_STATUSES.has(res.status)) break;
     if (!canRetry) break;
-    await new Promise((resolve) => setTimeout(resolve, 2000 * 2 ** attempt));
+    await new Promise((resolve) => setTimeout(resolve, 1000 * 2 ** attempt));
   }
   if (!res) {
     // Erreur réseau, CORS ou délai dépassé : le navigateur ne donne que « Failed to fetch ».
@@ -182,7 +191,33 @@ export const api = {
   removeFromPlaylist: (id: string, itemId: string) => request<void>(`/playlists/${id}/tracks/${itemId}`, { method: 'DELETE' }),
   movePlaylistItem: (id: string, itemId: string, position: number) =>
     request<void>(`/playlists/${id}/tracks/${itemId}`, { method: 'PATCH', body: json({ position }) }),
+
+  /** Téléversement, étape 1 : URL d'envoi direct vers le stockage. */
+  startUpload: (body: { fileName: string; size: number }) => request<UploadTicket>('/uploads', { method: 'POST', body: json(body) }),
+  /** Étape 3, après l'envoi : conversion et ajout aux « Musiques téléversées » (jusqu'à une minute pour un long fichier). */
+  completeUpload: (id: string, fileName: string) =>
+    request<{ playlistId: string; track: Track | null }>(`/uploads/${encodeURIComponent(id)}/complete`, {
+      method: 'POST',
+      body: json({ fileName }),
+      signal: AbortSignal.timeout(5 * 60_000),
+    }),
 };
+
+/**
+ * Téléversement, étape 2 : envoie le fichier directement au stockage. XMLHttpRequest plutôt que fetch, qui ne
+ * donne pas la progression d'un envoi.
+ */
+export function putFile(ticket: UploadTicket, file: File, onProgress: (fraction: number) => void) {
+  return new Promise<void>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', ticket.uploadUrl);
+    xhr.setRequestHeader('content-type', ticket.contentType);
+    xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded / e.total);
+    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new ApiError(xhr.status, `Envoi refusé (${xhr.status})`)));
+    xhr.onerror = () => reject(new ApiError(0, 'Envoi interrompu : vérifiez votre connexion'));
+    xhr.send(file);
+  });
+}
 
 function clean(params: Record<string, string | number | undefined>) {
   return Object.fromEntries(
@@ -195,16 +230,4 @@ function clean(params: Record<string, string | number | undefined>) {
 export function formatDuration(ms: number) {
   const total = Math.max(0, Math.round(ms / 1000));
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
-}
-
-/**
- * Garde le serveur éveillé tant que l'application est ouverte et visible : un serveur gratuit (Render)
- * s'endort après 15 minutes sans requête, et met ensuite près d'une minute à répondre.
- */
-export function keepServerAwake() {
-  if (isLocalPage) return () => undefined;
-  const id = setInterval(() => {
-    if (document.visibilityState === 'visible') void api.health().catch(() => undefined);
-  }, 10 * 60 * 1000);
-  return () => clearInterval(id);
 }

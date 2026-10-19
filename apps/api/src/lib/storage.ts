@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { DeleteObjectsCommand, GetObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl as getS3SignedUrl } from '@aws-sdk/s3-request-presigner';
 import { getSignedUrl as getCloudFrontSignedUrl } from '@aws-sdk/cloudfront-signer';
 import { readFileSync } from 'node:fs';
@@ -18,6 +18,11 @@ export interface Storage {
   getText(key: string): Promise<string>;
   /** URL de lecture temporaire pour un objet privé (segments audio). */
   signedUrl(key: string, ttlSeconds: number): Promise<string>;
+  /** URL d'envoi temporaire (PUT) : le navigateur envoie le fichier directement, sans passer par l'API. */
+  signedUploadUrl(key: string, contentType: string, ttlSeconds: number): Promise<string>;
+  getBuffer(key: string): Promise<Buffer>;
+  /** Supprime un objet, ou tous les objets sous un préfixe s'il se termine par « / ». */
+  remove(keyOrPrefix: string): Promise<void>;
 }
 
 function encodeKey(key: string) {
@@ -56,6 +61,34 @@ class S3Storage implements Storage {
     return res.Body.transformToString('utf8');
   }
 
+  async getBuffer(key: string) {
+    const res = await this.client.send(new GetObjectCommand({ Bucket: env.S3_BUCKET, Key: key }));
+    if (!res.Body) throw new Error(`Objet vide : ${key}`);
+    return Buffer.from(await res.Body.transformToByteArray());
+  }
+
+  async signedUploadUrl(key: string, contentType: string, ttlSeconds: number) {
+    return getS3SignedUrl(this.client, new PutObjectCommand({ Bucket: env.S3_BUCKET, Key: key, ContentType: contentType }), {
+      expiresIn: ttlSeconds,
+    });
+  }
+
+  async remove(keyOrPrefix: string) {
+    if (!keyOrPrefix.endsWith('/')) {
+      await this.client.send(new DeleteObjectsCommand({ Bucket: env.S3_BUCKET, Delete: { Objects: [{ Key: keyOrPrefix }] } }));
+      return;
+    }
+    let token: string | undefined;
+    do {
+      const page = await this.client.send(
+        new ListObjectsV2Command({ Bucket: env.S3_BUCKET, Prefix: keyOrPrefix, ContinuationToken: token }),
+      );
+      const objects = (page.Contents ?? []).flatMap((o) => (o.Key ? [{ Key: o.Key }] : []));
+      if (objects.length) await this.client.send(new DeleteObjectsCommand({ Bucket: env.S3_BUCKET, Delete: { Objects: objects } }));
+      token = page.NextContinuationToken;
+    } while (token);
+  }
+
   async signedUrl(key: string, ttlSeconds: number) {
     if (this.cloudFront) {
       const domain = this.cloudFront.domain.startsWith('http') ? this.cloudFront.domain : `https://${this.cloudFront.domain}`;
@@ -91,9 +124,22 @@ class LocalStorage implements Storage {
     return readFile(this.resolve(key), 'utf8');
   }
 
+  async getBuffer(key: string) {
+    return readFile(this.resolve(key));
+  }
+
   async signedUrl(key: string, ttlSeconds: number) {
     const exp = Math.floor(Date.now() / 1000) + ttlSeconds;
     return `${env.PUBLIC_API_URL}/files/${encodeKey(key)}?exp=${exp}&sig=${localSignature(key, exp)}`;
+  }
+
+  // Même URL signée que pour la lecture : la route PUT /files/* de l'API reçoit le fichier.
+  async signedUploadUrl(key: string, _contentType: string, ttlSeconds: number) {
+    return this.signedUrl(key, ttlSeconds);
+  }
+
+  async remove(keyOrPrefix: string) {
+    await rm(this.resolve(keyOrPrefix.replace(/\/$/, '')), { recursive: true, force: true });
   }
 }
 

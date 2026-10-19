@@ -96,6 +96,27 @@ function readStoredVideoHidden() {
   }
 }
 
+/**
+ * Téléphone (navigateur, appli Android, écran d'accueil iPhone) : le système met en pause les vidéos dès que l'appli
+ * passe en arrière-plan ou que l'écran s'éteint. Les titres YouTube ne peuvent donc pas y être lus : on les passe
+ * pour enchaîner sur le suivant, qui lui est lu par l'élément audio et continue écran éteint.
+ */
+const IS_MOBILE = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+const isBackground = () => IS_MOBILE && document.visibilityState === 'hidden';
+/** Titres YouTube passés d'affilée au maximum, pour ne pas boucler sur une file qui n'en contient que. */
+const MAX_BACKGROUND_SKIPS = 15;
+
+/** Position de lecture affichée sur l'écran verrouillé et dans la notification du téléphone. */
+function reportPosition(position: number, duration: number) {
+  if (!('mediaSession' in navigator) || !navigator.mediaSession.setPositionState) return;
+  if (!Number.isFinite(duration) || duration <= 0) return;
+  try {
+    navigator.mediaSession.setPositionState({ duration, position: Math.min(Math.max(0, position), duration), playbackRate: 1 });
+  } catch {
+    /* valeurs refusées par le navigateur : sans conséquence */
+  }
+}
+
 /** Tailles du mini-lecteur YouTube ; « compact » correspond au minimum autorisé par YouTube (200 × 200 px). */
 const DOCK_SIZES = ['compact', 'normal', 'large'] as const;
 type DockSize = (typeof DOCK_SIZES)[number];
@@ -165,6 +186,17 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   toastRef.current = toast;
   const nextRef = useRef<() => void>(() => undefined);
   const endedRef = useRef<() => void>(() => undefined);
+  // Pause demandée par l'utilisateur (bouton, écran verrouillé) : à distinguer d'une pause imposée par le système.
+  const userPausedRef = useRef(false);
+  const backgroundSkips = useRef(0);
+
+  /** Arrière-plan sur téléphone : passe un titre YouTube illisible et enchaîne sur le suivant. */
+  const skipInBackground = () => {
+    if (backgroundSkips.current >= MAX_BACKGROUND_SKIPS) return false;
+    backgroundSkips.current++;
+    nextRef.current();
+    return true;
+  };
 
   const isYouTube = () => engineRef.current === 'youtube';
   const setEngine = useCallback((e: Engine) => {
@@ -204,11 +236,14 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
                 onStateChange: ({ data }) => {
                   if (engineRef.current !== 'youtube') return;
                   if (data === YT_STATE.PLAYING) {
+                    backgroundSkips.current = 0;
                     setPlaying(true);
                     setLoading(false);
                   } else if (data === YT_STATE.PAUSED || data === YT_STATE.CUED) {
                     setPlaying(false);
                     setLoading(false);
+                    // Mise en pause par le téléphone (écran éteint, autre appli) : on continue avec le titre suivant.
+                    if (data === YT_STATE.PAUSED && isBackground() && !userPausedRef.current) skipInBackground();
                   } else if (data === YT_STATE.BUFFERING) {
                     setLoading(true);
                   } else if (data === YT_STATE.ENDED) {
@@ -243,6 +278,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     async (track: Track) => {
       const audio = audioRef.current;
       const id = ++loadId.current;
+      userPausedRef.current = false;
       setLoading(true);
       setProgress({ currentTime: 0, duration: track.durationMs / 1000, buffered: 0 });
       try {
@@ -250,6 +286,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         if (id !== loadId.current) return; // Un autre titre a été lancé entre-temps.
 
         if (format === 'youtube' && videoId) {
+          // Écran éteint sur téléphone : la vidéo ne démarrerait pas, on passe au titre suivant.
+          if (isBackground() && skipInBackground()) return;
           stopAudio();
           setEngine('youtube');
           setQuality('YouTube');
@@ -356,8 +394,13 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   // Commandes communes aux deux moteurs de lecture.
   const currentTime = useCallback(() => (isYouTube() ? ytRef.current?.getCurrentTime() ?? 0 : audioRef.current.currentTime), []);
-  const pause = useCallback(() => (isYouTube() ? ytRef.current?.pauseVideo() : audioRef.current.pause()), []);
+  const pause = useCallback(() => {
+    userPausedRef.current = true;
+    if (isYouTube()) ytRef.current?.pauseVideo();
+    else audioRef.current.pause();
+  }, []);
   const resume = useCallback(() => {
+    userPausedRef.current = false;
     if (isYouTube()) ytRef.current?.playVideo();
     else void audioRef.current.play().catch(() => undefined);
   }, []);
@@ -555,6 +598,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       const yt = ytRef.current;
       if (!yt) return;
       const duration = yt.getDuration() || 0;
+      reportPosition(yt.getCurrentTime() || 0, duration);
       setProgress((p) => ({
         currentTime: yt.getCurrentTime() || 0,
         duration: duration > 0 ? duration : p.duration,
@@ -572,6 +616,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     };
     const onTime = ifAudio(() => {
       const end = audio.buffered.length ? audio.buffered.end(audio.buffered.length - 1) : 0;
+      reportPosition(audio.currentTime, audio.duration);
       setProgress((p) => ({
         currentTime: audio.currentTime,
         duration: Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : p.duration,
@@ -582,7 +627,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     const onPause = ifAudio(() => setPlaying(false));
     const onEnded = ifAudio(() => endedRef.current());
     const onWaiting = ifAudio(() => setLoading(true));
-    const onPlaying = ifAudio(() => setLoading(false));
+    const onPlaying = ifAudio(() => {
+      backgroundSkips.current = 0;
+      setLoading(false);
+    });
     audio.addEventListener('timeupdate', onTime);
     audio.addEventListener('durationchange', onTime);
     audio.addEventListener('progress', onTime);
@@ -611,7 +659,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       title: current.title,
       artist: current.artist.name,
       album: current.album.title,
-      artwork: current.album.coverUrl ? [{ src: current.album.coverUrl, sizes: '640x640', type: 'image/jpeg' }] : [],
+      // Sans pochette (souvent le cas d'une musique téléversée) : l'icône de Velora dans la notification.
+      artwork: current.album.coverUrl
+        ? [{ src: current.album.coverUrl, sizes: '640x640', type: 'image/jpeg' }]
+        : [{ src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' }],
     });
     const handlers: [MediaSessionAction, MediaSessionActionHandler][] = [
       ['play', resume],
@@ -619,6 +670,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       ['previoustrack', prev],
       ['nexttrack', next],
       ['seekto', (d) => d.seekTime !== undefined && seek(d.seekTime)],
+      ['seekbackward', (d) => seek(currentTime() - (d.seekOffset ?? 10))],
+      ['seekforward', (d) => seek(currentTime() + (d.seekOffset ?? 10))],
     ];
     for (const [action, handler] of handlers) {
       try {
@@ -627,7 +680,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         /* action non supportée */
       }
     }
-  }, [current, next, prev, seek, pause, resume]);
+  }, [current, next, prev, seek, pause, resume, currentTime]);
 
   useEffect(() => {
     if ('mediaSession' in navigator) navigator.mediaSession.playbackState = playing ? 'playing' : 'paused';
