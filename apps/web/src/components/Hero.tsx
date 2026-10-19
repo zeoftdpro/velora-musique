@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
 import { Cover } from './Cover';
-import { PauseIcon, PlayIcon } from './icons';
+import { useToast } from '../context/toast';
+import { useShare } from '../share';
+import { PauseIcon, PlayIcon, ShareIcon } from './icons';
 
 export function Hero({ kind, title, cover, round, meta, children }: {
   kind: string;
@@ -23,6 +25,17 @@ export function Hero({ kind, title, cover, round, meta, children }: {
       </div>
       {children && <div className="hero__actions">{children}</div>}
     </header>
+  );
+}
+
+/** Bouton « Partager » d'une page (album, artiste, playlist, titre). `blocked` : raison pour laquelle on ne peut pas. */
+export function ShareButton({ data, blocked }: { data: { title: string; text: string; url: string }; blocked?: string }) {
+  const share = useShare();
+  const toast = useToast();
+  return (
+    <button className="icon-btn" onClick={() => (blocked ? toast(blocked) : share(data))} aria-label="Partager" title="Partager">
+      <ShareIcon />
+    </button>
   );
 }
 

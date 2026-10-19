@@ -1,6 +1,7 @@
 import { Link, useParams } from 'react-router-dom';
 import { api, formatDuration, type Track } from '../api';
-import { BigPlayButton, Hero } from '../components/Hero';
+import { BigPlayButton, Hero, ShareButton } from '../components/Hero';
+import { shareUrls } from '../share';
 import { ErrorState, Loading } from '../components/States';
 import { TrackList } from '../components/TrackList';
 import { usePlayer } from '../context/player';
@@ -39,6 +40,9 @@ export function AlbumPage() {
           <span>{album.tracks.length} titres, {formatDuration(total)}</span>
         </>}>
         <BigPlayButton {...play} disabled={album.tracks.length === 0} />
+        <ShareButton
+          data={{ title: `${album.title} · ${album.artist.name}`, text: `Écoute l'album « ${album.title} » de ${album.artist.name} sur Velora`, url: shareUrls.album(album.id) }}
+          blocked={album.tracks.some((t) => t.uploaded) ? 'Album de vos musiques téléversées : il reste privé et ne peut pas être partagé' : undefined} />
       </Hero>
       <TrackList tracks={album.tracks} showAlbum={false} showCover={false} />
     </div>

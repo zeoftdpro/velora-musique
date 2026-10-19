@@ -16,6 +16,7 @@ import fileRoutes from './routes/files.js';
 import meRoutes from './routes/me.js';
 import playlistRoutes from './routes/playlists.js';
 import streamRoutes from './routes/stream.js';
+import shareRoutes from './routes/share.js';
 import uploadRoutes from './routes/uploads.js';
 import { meili } from './services/search.js';
 
@@ -89,6 +90,7 @@ export async function buildApp() {
   await app.register(streamRoutes);
   await app.register(fileRoutes);
   await app.register(uploadRoutes);
+  await app.register(shareRoutes);
 
   return app;
 }

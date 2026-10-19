@@ -30,6 +30,8 @@ export type Track = {
   album: { id: string; title: string; coverUrl: string | null };
   genre: { name: string; slug: string } | null;
   source: 'local' | 'jamendo' | 'youtube';
+  /** Musique téléversée par l'utilisateur : privée, impossible à partager. */
+  uploaded?: boolean;
   /** Ajouté par la lecture automatique (suggestion), et non choisi par l'utilisateur. */
   suggested?: boolean;
 };
@@ -163,6 +165,7 @@ export const api = {
   artists: (source: 'local' | 'all' = 'all') => request<Artist[]>(`/artists?limit=50&source=${source}`),
   artist: (id: string) => request<ArtistDetail>(`/artists/${id}`),
   tracks: (params: { genre?: string; limit?: number } = {}) => request<Track[]>(`/tracks?${new URLSearchParams(clean(params))}`),
+  track: (id: string) => request<Track>(`/tracks/${id}`),
   search: (q: string, genre?: string) => request<SearchResults>(`/search?${new URLSearchParams(clean({ q, genre }))}`),
   searchWeb: (q: string) => request<WebSearchResults>(`/search/web?${new URLSearchParams({ q })}`),
 

@@ -690,3 +690,12 @@ a.btn { display: inline-block; }
 @media (max-width: 860px) {
   .upload-panel { left: 16px; bottom: 150px; }
 }
+
+/* ---------- Liens partagés ---------- */
+
+.auth__shared {
+  display: flex; align-items: center; gap: 12px; margin: 4px 0 18px; padding: 12px;
+  border-radius: 10px; background: var(--accent-soft); border: 1px solid rgba(59, 130, 246, 0.35); text-align: left;
+}
+.auth__shared p { margin: 0; font-size: 14px; line-height: 1.45; }
+.auth__shared .cover, .auth__shared img { flex-shrink: 0; }

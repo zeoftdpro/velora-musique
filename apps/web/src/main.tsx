@@ -17,6 +17,7 @@ import { HomePage } from './pages/Home';
 import { LibraryPage, LikedPage } from './pages/Library';
 import { PlaylistPage } from './pages/Playlist';
 import { SearchPage } from './pages/Search';
+import { TrackPage } from './pages/Track';
 import { setupPwa } from './pwa';
 import './styles.css';
 
@@ -43,8 +44,11 @@ function Protected() {
 
 function GuestOnly({ children }: { children: React.ReactNode }) {
   const { user, ready } = useAuth();
+  const location = useLocation();
   if (!ready) return <BootScreen />;
-  return user ? <Navigate to="/" replace /> : children;
+  // Une fois connecté : retour à la page demandée au départ (lien partagé…), sinon l'accueil.
+  const from = (location.state as { from?: string } | null)?.from;
+  return user ? <Navigate to={from ?? '/'} replace /> : children;
 }
 
 createRoot(document.getElementById('root')!).render(
@@ -64,6 +68,7 @@ createRoot(document.getElementById('root')!).render(
                 <Route path="album/:id" element={<AlbumPage />} />
                 <Route path="artist/:id" element={<ArtistPage />} />
                 <Route path="playlist/:id" element={<PlaylistPage />} />
+                <Route path="track/:id" element={<TrackPage />} />
                 <Route path="account" element={<AccountPage />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Route>

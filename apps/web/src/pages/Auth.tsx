@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { API_CONFIGURED } from '../api';
+import { api, API_CONFIGURED } from '../api';
+import { Cover } from '../components/Cover';
 import { InstallBanner } from '../components/InstallBanner';
 import { LogoMark } from '../components/icons';
 import { useAuth } from '../context/auth';
-import { useTitle } from '../hooks';
+import { useAsync, useTitle } from '../hooks';
 
 export function AuthPage({ mode }: { mode: 'login' | 'register' }) {
   useTitle(mode === 'login' ? 'Connexion' : 'Inscription');
@@ -14,6 +15,12 @@ export function AuthPage({ mode }: { mode: 'login' | 'register' }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  // Arrivée par un lien partagé sans être connecté : on montre le titre en question (la fiche d'un titre public
+  // se lit sans compte).
+  const from = (location.state as { from?: string } | null)?.from;
+  const sharedId = from?.match(/^\/track\/([0-9a-f-]{36})/)?.[1];
+  const { data: shared } = useAsync(() => (sharedId ? api.track(sharedId).catch(() => null) : Promise.resolve(null)), [sharedId]);
+
   const submit = async (form: FormData) => {
     setBusy(true);
     setError(null);
@@ -22,7 +29,6 @@ export function AuthPage({ mode }: { mode: 'login' | 'register' }) {
     try {
       if (mode === 'login') await login(email, password);
       else await register(email, password, String(form.get('displayName') ?? ''));
-      const from = (location.state as { from?: string } | null)?.from;
       navigate(from ?? '/', { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Une erreur est survenue');
@@ -37,6 +43,15 @@ export function AuthPage({ mode }: { mode: 'login' | 'register' }) {
         <div className="auth__brand"><LogoMark size={40} /><span>Velora</span></div>
         <h1>{mode === 'login' ? 'Connexion' : 'Créer un compte'}</h1>
         <p className="muted">{mode === 'login' ? 'Retrouvez votre musique.' : 'Gratuit, sans carte bancaire.'}</p>
+        {shared && (
+          <div className="auth__shared">
+            <Cover src={shared.album.coverUrl} alt={shared.album.title} size={48} />
+            <p>
+              On vous a partagé <strong>« {shared.title} »</strong> de {shared.artist.name}.{' '}
+              {mode === 'login' ? 'Connectez-vous' : 'Créez votre compte gratuit'} pour l’écouter tout de suite.
+            </p>
+          </div>
+        )}
         {!API_CONFIGURED && (
           <p className="form__error" role="alert">
             Ce site n’est relié à aucun serveur Velora : la connexion est impossible pour l’instant.
@@ -60,8 +75,9 @@ export function AuthPage({ mode }: { mode: 'login' | 'register' }) {
         </form>
         <p className="muted auth__switch">
           {mode === 'login'
-            ? <>Pas encore de compte ? <Link to="/register">Inscription</Link></>
-            : <>Déjà inscrit ? <Link to="/login">Connexion</Link></>}
+            // L'état garde la page demandée (lien partagé…) quand on passe de la connexion à l'inscription.
+            ? <>Pas encore de compte ? <Link to="/register" state={location.state}>Inscription</Link></>
+            : <>Déjà inscrit ? <Link to="/login" state={location.state}>Connexion</Link></>}
         </p>
       </div>
     </div>

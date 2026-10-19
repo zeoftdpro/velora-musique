@@ -4,7 +4,8 @@ import { useLibrary } from '../context/library';
 import { usePlayer } from '../context/player';
 import { AddToPlaylistButton } from './AddToPlaylist';
 import { Cover } from './Cover';
-import { CloseIcon, HeartIcon } from './icons';
+import { useShareTrack } from '../share';
+import { CloseIcon, HeartIcon, ShareIcon } from './icons';
 
 const UP_NEXT_COUNT = 10;
 
@@ -12,6 +13,7 @@ const UP_NEXT_COUNT = 10;
 export function NowPlayingPanel() {
   const { current, queue, index, togglePanel, registerVideoSlot, jumpTo, autoplay, toggleAutoplay } = usePlayer();
   const { favoriteIds, toggleFavorite } = useLibrary();
+  const shareTrack = useShareTrack();
 
   if (!current) {
     return (
@@ -47,6 +49,11 @@ export function NowPlayingPanel() {
           <Link to={`/album/${current.album.id}`} className="np__title">{current.title}</Link>
           <Link to={`/artist/${current.artist.id}`} className="np__artist">{current.artist.name}</Link>
         </div>
+        {!current.uploaded && (
+          <button className="icon-btn" onClick={() => shareTrack(current)} aria-label="Partager" title="Partager">
+            <ShareIcon size={20} />
+          </button>
+        )}
         <AddToPlaylistButton track={current} size={20} />
         <button className={`icon-btn ${liked ? 'is-active' : ''}`} onClick={() => toggleFavorite(current.id)}
           aria-label={liked ? 'Retirer des titres likés' : 'Ajouter aux titres likés'} aria-pressed={liked}>

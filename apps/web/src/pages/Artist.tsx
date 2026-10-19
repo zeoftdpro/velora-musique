@@ -1,10 +1,11 @@
 import { useParams } from 'react-router-dom';
 import { api } from '../api';
 import { AlbumCard, Grid } from '../components/Cards';
-import { BigPlayButton, Hero } from '../components/Hero';
+import { BigPlayButton, Hero, ShareButton } from '../components/Hero';
 import { ErrorState, Loading } from '../components/States';
 import { TrackList } from '../components/TrackList';
 import { useAsync, useCoverColor, useTitle } from '../hooks';
+import { shareUrls } from '../share';
 import { usePlayList } from './Album';
 
 export function ArtistPage() {
@@ -24,6 +25,9 @@ export function ArtistPage() {
         cover={{ src: image, alt: artist.name }}
         meta={<span>{artist.albums.length} album{artist.albums.length > 1 ? 's' : ''}</span>}>
         <BigPlayButton {...play} disabled={artist.topTracks.length === 0} />
+        <ShareButton
+          data={{ title: artist.name, text: `Écoute ${artist.name} sur Velora`, url: shareUrls.artist(artist.id) }}
+          blocked={artist.topTracks.some((t) => t.uploaded) ? 'Artiste de vos musiques téléversées : il reste privé et ne peut pas être partagé' : undefined} />
       </Hero>
       {artist.bio && <p className="bio">{artist.bio}</p>}
 

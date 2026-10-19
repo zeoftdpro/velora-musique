@@ -26,6 +26,7 @@ export const trackColumns = {
   genreName: genres.name,
   genreSlug: genres.slug,
   externalId: tracks.externalId,
+  ownerId: tracks.ownerId,
 };
 
 type TrackRow = {
@@ -42,6 +43,7 @@ type TrackRow = {
   genreName: string | null;
   genreSlug: string | null;
   externalId: string | null;
+  ownerId: string | null;
 };
 
 const sourceOf = (externalId: string | null) =>
@@ -58,6 +60,8 @@ export function toTrackDto(row: TrackRow) {
     album: { id: row.albumId, title: row.albumTitle, coverUrl: assetUrl(row.albumCoverKey) },
     genre: row.genreName ? { name: row.genreName, slug: row.genreSlug } : null,
     source: sourceOf(row.externalId),
+    // Musique téléversée : privée (seul son propriétaire la voit), donc impossible à partager.
+    uploaded: row.ownerId !== null,
   };
 }
 export type TrackDto = ReturnType<typeof toTrackDto>;

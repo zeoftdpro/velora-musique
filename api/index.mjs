@@ -10,8 +10,13 @@ const ready = buildApp().then(async (app) => {
 
 export default async function handler(req, res) {
   const app = await ready;
-  // Le site appelle /api/... ; les routes de l'API sont déclarées sans ce préfixe.
-  req.url = req.url.replace(/^\/api(?=\/|\?|$)/, '') || '/';
-  if (req.url.startsWith('?')) req.url = `/${req.url}`;
+  if (/^\/(track|album|artist|playlist)\//.test(req.url)) {
+    // Lien partagé : page de l'application avec l'aperçu (pochette, titre) pour WhatsApp, Messenger…
+    req.url = `/share${req.url}`;
+  } else {
+    // Le site appelle /api/... ; les routes de l'API sont déclarées sans ce préfixe.
+    req.url = req.url.replace(/^\/api(?=\/|\?|$)/, '') || '/';
+    if (req.url.startsWith('?')) req.url = `/${req.url}`;
+  }
   app.server.emit('request', req, res);
 }

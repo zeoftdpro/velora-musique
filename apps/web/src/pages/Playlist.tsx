@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api, formatDuration } from '../api';
 import { Cover } from '../components/Cover';
-import { BigPlayButton, Hero } from '../components/Hero';
+import { BigPlayButton, Hero, ShareButton } from '../components/Hero';
 import { TrashIcon, UploadIcon } from '../components/icons';
 import { ErrorState, Loading } from '../components/States';
 import { TrackList } from '../components/TrackList';
@@ -11,6 +11,7 @@ import { useLibrary } from '../context/library';
 import { useToast } from '../context/toast';
 import { useUploads } from '../context/uploads';
 import { useAsync, useTitle } from '../hooks';
+import { shareUrls } from '../share';
 import { usePlayList } from './Album';
 
 export function PlaylistPage() {
@@ -71,6 +72,12 @@ export function PlaylistPage() {
           <span>{playlist.tracks.length} titre{playlist.tracks.length > 1 ? 's' : ''}{total ? `, ${formatDuration(total)}` : ''}</span>
         </>}>
         <BigPlayButton {...play} disabled={playlist.tracks.length === 0} />
+        {/* Une playlist privée n'est visible que de son propriétaire : son lien ne marcherait pas chez un ami. */}
+        {!isUploads && (
+          <ShareButton
+            data={{ title: playlist.name, text: `Écoute la playlist « ${playlist.name} » sur Velora`, url: shareUrls.playlist(playlist.id) }}
+            blocked={playlist.isPublic ? undefined : 'Playlist privée : rendez-la publique (bouton « Modifier ») pour la partager'} />
+        )}
         {playlist.isOwner && (
           <>
             {isUploads && <button className="btn btn--primary" onClick={pickFiles}><UploadIcon size={18} /> Téléverser</button>}

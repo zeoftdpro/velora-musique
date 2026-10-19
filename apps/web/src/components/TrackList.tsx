@@ -6,7 +6,8 @@ import { usePlayer } from '../context/player';
 import { useToast } from '../context/toast';
 import { Cover } from './Cover';
 import { PlaylistMenuItems } from './AddToPlaylist';
-import { DownIcon, HeartIcon, MoreIcon, NextIcon, PauseIcon, PlayIcon, QueueIcon, TrashIcon, UpIcon } from './icons';
+import { useShareTrack } from '../share';
+import { DownIcon, HeartIcon, MoreIcon, NextIcon, PauseIcon, PlayIcon, QueueIcon, ShareIcon, TrashIcon, UpIcon } from './icons';
 
 type Row = Track & { itemId?: string };
 
@@ -74,6 +75,7 @@ function TrackMenu({ track, index, count, onRemove, removeLabel = 'Retirer de la
   const ref = useRef<HTMLDivElement>(null);
   const { playNext, addToQueue } = usePlayer();
   const toast = useToast();
+  const shareTrack = useShareTrack();
 
   useEffect(() => {
     if (!open) return;
@@ -109,6 +111,12 @@ function TrackMenu({ track, index, count, onRemove, removeLabel = 'Retirer de la
           <button role="menuitem" onClick={run(() => { addToQueue(track); toast('Ajouté à la file d’attente'); })}>
             <QueueIcon size={16} /> Ajouter à la file d’attente
           </button>
+          {/* Une musique téléversée est privée : pas de lien à partager. */}
+          {!track.uploaded && (
+            <button role="menuitem" onClick={run(() => shareTrack(track))}>
+              <ShareIcon size={16} /> Partager
+            </button>
+          )}
           <div className="menu__sep" />
           <PlaylistMenuItems track={track} onDone={() => setOpen(false)} />
           {(onMove || onRemove) && <div className="menu__sep" />}
