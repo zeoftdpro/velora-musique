@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { api, ApiError, type Track } from '../api';
 import { EyeOffIcon, MaximizeIcon, MinimizeIcon } from '../components/icons';
 import { loadYouTubeApi, YT_STATE, YT_UNPLAYABLE, type YTPlayer } from '../youtube';
+import { useLibrary } from './library';
 import { useToast } from './toast';
 
 type PlayerState = {
@@ -26,13 +27,18 @@ type PlayerState = {
   /** Lecture automatique : à la fin de la file, des titres recommandés sont ajoutés et enchaînés. */
   autoplay: boolean;
   toggleAutoplay: () => void;
+  /** Enchaîner les playlists : à la fin d'une playlist, la suivante de la bibliothèque démarre, et ainsi de suite. */
+  playlistChain: boolean;
+  togglePlaylistChain: () => void;
+  /** Origine de la file d'attente (playlist lue), null pour un album, une recherche… */
+  queueSource: QueueSource;
   /** Panneau « En cours de lecture » (à droite, sur grand écran). */
   panelOpen: boolean;
   togglePanel: () => void;
   /** Emplacement du clip YouTube dans le panneau (ref callback) ; le lecteur vient s'y superposer. */
   registerVideoSlot: (el: HTMLElement | null) => void;
   videoInPanel: boolean;
-  playQueue: (tracks: Track[], startIndex?: number) => void;
+  playQueue: (tracks: Track[], startIndex?: number, source?: QueueSource) => void;
   playNext: (track: Track) => void;
   addToQueue: (track: Track) => void;
   jumpTo: (index: number) => void;
@@ -49,6 +55,7 @@ type Progress = { currentTime: number; duration: number; buffered: number };
 /** Moteur de lecture : élément audio (HLS ou MP3) ou lecteur YouTube officiel intégré. */
 type Engine = 'audio' | 'youtube';
 export type Repeat = 'off' | 'all' | 'one';
+export type QueueSource = { kind: 'playlist'; id: string } | null;
 type SlotRect = { top: number; left: number; width: number; height: number };
 
 const PlayerContext = createContext<PlayerState | null>(null);
@@ -62,6 +69,7 @@ const SHUFFLE_KEY = 'velora.shuffle';
 const REPEAT_KEY = 'velora.repeat';
 const PANEL_KEY = 'velora.panel';
 const AUTOPLAY_KEY = 'velora.autoplay';
+const PLAYLIST_CHAIN_KEY = 'velora.playlistChain';
 
 function readStored(key: string) {
   try {
@@ -159,6 +167,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   });
   const [panelOpen, setPanelOpen] = useState(() => readStored(PANEL_KEY) !== 'false');
   const [autoplay, setAutoplay] = useState(() => readStored(AUTOPLAY_KEY) !== 'false');
+  const [playlistChain, setPlaylistChain] = useState(() => readStored(PLAYLIST_CHAIN_KEY) === 'true');
+  const [queueSource, setQueueSource] = useState<QueueSource>(null);
+  const { playlists } = useLibrary();
+  // Une playlist lue avec l'enchaînement activé : à la fin, on passe à la suivante plutôt qu'aux suggestions.
+  const chaining = playlistChain && queueSource?.kind === 'playlist';
   // Suggestions demandées pour le dernier titre de la file (une seule fois par titre).
   const radioRef = useRef<{ seed: string; promise: Promise<Track[]> } | null>(null);
   const [videoSlot, setVideoSlot] = useState<HTMLElement | null>(null);
@@ -353,7 +366,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   );
 
   const playQueue = useCallback(
-    (tracks: Track[], startIndex = 0) => {
+    (tracks: Track[], startIndex = 0, source: QueueSource = null) => {
+      setQueueSource(source);
       const start = tracks[startIndex];
       if (shuffle && start) {
         originalQueue.current = tracks;
@@ -415,10 +429,41 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  /**
+   * Playlist suivante (ordre de la bibliothèque, en recommençant au début après la dernière), en sautant les
+   * playlists vides. Null s'il n'y en a pas d'autre à lire.
+   */
+  const nextPlaylist = useCallback(
+    async (fromId: string) => {
+      const start = playlists.findIndex((p) => p.id === fromId);
+      for (let step = 1; step <= playlists.length; step++) {
+        const candidate = playlists[(start + step) % playlists.length]!;
+        if (candidate.id === fromId) break; // tour complet : seule la playlist d'origine contient des titres
+        if (candidate.trackCount === 0) continue;
+        const detail = await api.playlist(candidate.id).catch(() => null);
+        if (detail?.tracks.length) return detail;
+      }
+      return null;
+    },
+    [playlists],
+  );
+
   const next = useCallback(() => {
     if (index + 1 < queue.length) playAt(queue, index + 1);
     else if (repeat === 'all' && queue.length > 0) playAt(queue, 0);
-    else if (autoplay && current && radioRef.current?.seed === current.id) {
+    else if (chaining && queueSource) {
+      const id = loadId.current;
+      void nextPlaylist(queueSource.id).then((playlist) => {
+        if (id !== loadId.current) return; // l'utilisateur a lancé autre chose entre-temps
+        if (playlist) {
+          playQueue(playlist.tracks, 0, { kind: 'playlist', id: playlist.id });
+          toast(`Playlist suivante : « ${playlist.name} »`);
+        } else {
+          pause();
+          seek(0);
+        }
+      });
+    } else if (autoplay && current && radioRef.current?.seed === current.id) {
       // Suggestions encore en route (titre passé tout de suite) : on enchaîne dès leur arrivée.
       const id = loadId.current;
       void radioRef.current.promise.then((added) => {
@@ -433,7 +478,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       pause();
       seek(0);
     }
-  }, [index, queue, playAt, pause, seek, repeat, autoplay, current]);
+  }, [index, queue, playAt, pause, seek, repeat, autoplay, current, chaining, queueSource, nextPlaylist, playQueue, toast]);
   nextRef.current = next;
 
   // Fin naturelle d'un titre : « répéter le titre » le relance, sinon on passe au suivant.
@@ -464,8 +509,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, [shuffle, current, queue, index]);
 
   // Dernier titre de la file : on demande des suggestions pour la suite, ajoutées en fin de file.
+  // Pas de suggestions quand une playlist va enchaîner sur la suivante.
   useEffect(() => {
-    if (!autoplay || repeat !== 'off' || !current || index !== queue.length - 1) return;
+    if (!autoplay || chaining || repeat !== 'off' || !current || index !== queue.length - 1) return;
     if (radioRef.current?.seed === current.id) return;
     const exclude = queue.slice(-100).map((t) => t.id);
     const seed = current.id;
@@ -480,7 +526,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       setQueue((q) => (q.at(-1)?.id === seed ? [...q, ...added] : q));
       if (originalQueue.current?.at(-1)?.id === seed) originalQueue.current = [...originalQueue.current, ...added];
     });
-  }, [autoplay, repeat, current, index, queue]);
+  }, [autoplay, chaining, repeat, current, index, queue]);
 
   const toggleAutoplay = useCallback(() => {
     const enable = !autoplay;
@@ -488,6 +534,12 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     store(AUTOPLAY_KEY, String(enable));
     if (!enable) radioRef.current = null;
   }, [autoplay]);
+
+  const togglePlaylistChain = useCallback(() => {
+    const enable = !playlistChain;
+    setPlaylistChain(enable);
+    store(PLAYLIST_CHAIN_KEY, String(enable));
+  }, [playlistChain]);
 
   const cycleRepeat = useCallback(() => {
     const nextMode: Repeat = repeat === 'off' ? 'all' : repeat === 'all' ? 'one' : 'off';
@@ -711,13 +763,13 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const value = useMemo<PlayerState>(
     () => ({
       queue, index, current, playing, loading, volume, muted, quality, videoHidden,
-      shuffle, repeat, autoplay, panelOpen, videoInPanel: slotRect !== null, registerVideoSlot: setVideoSlot,
+      shuffle, repeat, autoplay, playlistChain, queueSource, panelOpen, videoInPanel: slotRect !== null, registerVideoSlot: setVideoSlot,
       playQueue, playNext, addToQueue, jumpTo, toggle, next, prev, seek, setVolume, toggleMute, toggleVideo,
-      toggleShuffle, cycleRepeat, toggleAutoplay, togglePanel,
+      toggleShuffle, cycleRepeat, toggleAutoplay, togglePlaylistChain, togglePanel,
     }),
-    [queue, index, current, playing, loading, volume, muted, quality, videoHidden, shuffle, repeat, autoplay, panelOpen, slotRect,
-      playQueue, playNext, addToQueue, jumpTo, toggle, next, prev, seek, setVolume, toggleMute, toggleVideo,
-      toggleShuffle, cycleRepeat, toggleAutoplay, togglePanel],
+    [queue, index, current, playing, loading, volume, muted, quality, videoHidden, shuffle, repeat, autoplay, playlistChain, queueSource,
+      panelOpen, slotRect, playQueue, playNext, addToQueue, jumpTo, toggle, next, prev, seek, setVolume, toggleMute, toggleVideo,
+      toggleShuffle, cycleRepeat, toggleAutoplay, togglePlaylistChain, togglePanel],
   );
 
   // Panneau ouvert avec un emplacement visible : le clip s'y affiche (quel que soit le réglage « vidéo masquée »).

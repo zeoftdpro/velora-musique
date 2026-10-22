@@ -11,7 +11,7 @@ const UP_NEXT_COUNT = 10;
 
 /** Panneau « En cours de lecture », à droite (comme Spotify) : clip YouTube ou pochette, infos et file d'attente. */
 export function NowPlayingPanel() {
-  const { current, queue, index, togglePanel, registerVideoSlot, jumpTo, autoplay, toggleAutoplay } = usePlayer();
+  const { current, queue, index, togglePanel, registerVideoSlot, jumpTo, autoplay, toggleAutoplay, playlistChain, togglePlaylistChain, queueSource } = usePlayer();
   const { favoriteIds, toggleFavorite } = useLibrary();
   const shareTrack = useShareTrack();
 
@@ -69,9 +69,15 @@ export function NowPlayingPanel() {
             <span className="switch__track"><span className="switch__thumb" /></span> Lecture auto
           </button>
         </div>
+        <button className={`switch np__chain ${playlistChain ? 'switch--on' : ''}`} onClick={togglePlaylistChain} role="switch"
+          aria-checked={playlistChain} title="À la fin d'une playlist, lancer la suivante de votre bibliothèque">
+          <span className="switch__track"><span className="switch__thumb" /></span> Enchaîner les playlists
+        </button>
         {upNext.length === 0 ? (
           <p className="muted small">
-            {autoplay
+            {playlistChain && queueSource?.kind === 'playlist'
+              ? 'Fin de la playlist : la suivante de votre bibliothèque va démarrer.'
+              : autoplay
               ? 'Fin de la file d’attente : des titres recommandés vont s’enchaîner.'
               : 'Fin de la file d’attente. Ajoutez des titres avec « Ajouter à la file d’attente ».'}
           </p>

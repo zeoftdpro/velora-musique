@@ -4,18 +4,21 @@ import { BigPlayButton, Hero, ShareButton } from '../components/Hero';
 import { shareUrls } from '../share';
 import { ErrorState, Loading } from '../components/States';
 import { TrackList } from '../components/TrackList';
-import { usePlayer } from '../context/player';
+import { usePlayer, type QueueSource } from '../context/player';
 import { useAsync, useCoverColor, useTitle } from '../hooks';
 
-/** Lit une liste de titres, ou met en pause si elle est déjà en cours de lecture. */
-export function usePlayList(tracks: Track[] | undefined) {
+/**
+ * Lit une liste de titres, ou met en pause si elle est déjà en cours de lecture. `source` : playlist d'origine,
+ * pour pouvoir enchaîner sur la suivante à la fin.
+ */
+export function usePlayList(tracks: Track[] | undefined, source: QueueSource = null) {
   const { current, playing, playQueue, toggle, queue } = usePlayer();
   const active = Boolean(
     current && tracks?.length && queue.length === tracks.length && queue.every((t, i) => t.id === tracks[i]?.id),
   );
   return {
     playing: active && playing,
-    onClick: () => (active ? toggle() : tracks && playQueue(tracks, 0)),
+    onClick: () => (active ? toggle() : tracks && playQueue(tracks, 0, source)),
   };
 }
 

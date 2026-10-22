@@ -12,6 +12,7 @@ import { useToast } from '../context/toast';
 import { useUploads } from '../context/uploads';
 import { useAsync, useTitle } from '../hooks';
 import { shareUrls } from '../share';
+import { usePlayer } from '../context/player';
 import { usePlayList } from './Album';
 
 export function PlaylistPage() {
@@ -25,7 +26,9 @@ export function PlaylistPage() {
   const { data: playlist, error, loading, reload } = useAsync(() => api.playlist(id!), [id, version]);
   const [editing, setEditing] = useState(false);
   useTitle(playlist?.name);
-  const play = usePlayList(playlist?.tracks);
+  const source = playlist ? ({ kind: 'playlist', id: playlist.id } as const) : null;
+  const play = usePlayList(playlist?.tracks, source);
+  const { playlistChain, togglePlaylistChain } = usePlayer();
 
   if (loading && !playlist) return <Loading />;
   if (error || !playlist) return <ErrorState message={error ?? 'Playlist introuvable'} />;
@@ -84,6 +87,10 @@ export function PlaylistPage() {
             <button className="btn btn--ghost" onClick={() => setEditing((e) => !e)}>{isUploads ? 'Renommer' : 'Modifier'}</button>
             {/* La catégorie des musiques téléversées ne se supprime pas : elle reçoit les prochains envois. */}
             {!isUploads && <button className="icon-btn" onClick={remove} aria-label="Supprimer la playlist"><TrashIcon /></button>}
+            <button className={`switch ${playlistChain ? 'switch--on' : ''}`} onClick={togglePlaylistChain} role="switch"
+              aria-checked={playlistChain} title="À la fin de cette playlist, lancer la suivante de votre bibliothèque">
+              <span className="switch__track"><span className="switch__thumb" /></span> Enchaîner les playlists
+            </button>
           </>
         )}
       </Hero>
@@ -103,6 +110,7 @@ export function PlaylistPage() {
 
       <TrackList
         tracks={playlist.tracks}
+        source={source}
         // Dans « Musiques téléversées », retirer un titre supprime le fichier : on demande confirmation.
         removeLabel={isUploads ? 'Supprimer définitivement' : undefined}
         onRemove={playlist.isOwner ? async (t) => {

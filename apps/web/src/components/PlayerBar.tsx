@@ -12,7 +12,10 @@ export function PlayerBar() {
   const {
     current, playing, loading, toggle, next, prev, volume, muted, setVolume, toggleMute, quality, queue, index,
     videoHidden, toggleVideo, shuffle, toggleShuffle, repeat, cycleRepeat, panelOpen, togglePanel, videoInPanel,
+    playlistChain, queueSource,
   } = usePlayer();
+  // Fin de la file : « suivant » reste possible si la file boucle ou si une autre playlist va s'enchaîner.
+  const hasNext = index < queue.length - 1 || repeat === 'all' || (playlistChain && queueSource?.kind === 'playlist');
   const { favoriteIds, toggleFavorite } = useLibrary();
   const wide = useMediaQuery(PANEL_MEDIA);
   const repeatLabel = repeat === 'off' ? 'Répéter : désactivé' : repeat === 'all' ? 'Répéter : toute la file' : 'Répéter : ce titre';
@@ -48,7 +51,7 @@ export function PlayerBar() {
           <button className={`player__toggle ${loading ? 'is-loading' : ''}`} onClick={toggle} disabled={!current} aria-label={playing ? 'Pause' : 'Lecture'}>
             {playing ? <PauseIcon size={20} /> : <PlayIcon size={20} />}
           </button>
-          <button className="icon-btn" onClick={next} disabled={!current || (index >= queue.length - 1 && repeat !== 'all')} aria-label="Suivant"><NextIcon /></button>
+          <button className="icon-btn" onClick={next} disabled={!current || !hasNext} aria-label="Suivant"><NextIcon /></button>
           <button className={`icon-btn player__mode ${repeat !== 'off' ? 'is-on' : ''}`} onClick={cycleRepeat}
             aria-label={repeatLabel} title={repeatLabel}>
             <RepeatIcon size={18} one={repeat === 'one'} />

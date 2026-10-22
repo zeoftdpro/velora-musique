@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { formatDuration, type Track } from '../api';
 import { useLibrary } from '../context/library';
-import { usePlayer } from '../context/player';
+import { usePlayer, type QueueSource } from '../context/player';
 import { useToast } from '../context/toast';
 import { Cover } from './Cover';
 import { PlaylistMenuItems } from './AddToPlaylist';
@@ -22,9 +22,11 @@ type Props = {
   /** Libellé de l'action de retrait (« Retirer de la playlist » par défaut). */
   removeLabel?: string;
   onMove?: (track: Row, delta: -1 | 1) => void;
+  /** Playlist d'origine de la liste : la lecture pourra enchaîner sur la suivante. */
+  source?: QueueSource;
 };
 
-export function TrackList({ tracks, showAlbum = true, showCover = true, offset = 0, onRemove, removeLabel, onMove }: Props) {
+export function TrackList({ tracks, showAlbum = true, showCover = true, offset = 0, onRemove, removeLabel, onMove, source = null }: Props) {
   const { current, playing, playQueue, toggle } = usePlayer();
   const { favoriteIds, toggleFavorite } = useLibrary();
 
@@ -35,7 +37,7 @@ export function TrackList({ tracks, showAlbum = true, showCover = true, offset =
       {tracks.map((track, i) => {
         const isCurrent = current?.id === track.id;
         const liked = favoriteIds.has(track.id);
-        const onPlay = () => (isCurrent ? toggle() : playQueue(tracks, i));
+        const onPlay = () => (isCurrent ? toggle() : playQueue(tracks, i, source));
         return (
           <li key={track.itemId ?? track.id} className={`track ${isCurrent ? 'track--current' : ''}`} onDoubleClick={onPlay}>
             <button className="track__index" onClick={onPlay} aria-label={isCurrent && playing ? 'Pause' : `Lire ${track.title}`}>

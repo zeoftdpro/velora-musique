@@ -611,6 +611,8 @@ a.btn { display: inline-block; }
 .switch--on { color: var(--text); }
 .switch--on .switch__track { background: var(--accent); }
 .switch--on .switch__thumb { transform: translateX(12px); }
+.np__chain { margin: 10px 0 14px; }
+.hero__actions .switch { margin-left: 6px; }
 .np__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .np__item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 6px; border-radius: 8px; text-align: left; }
 .np__item:hover { background: var(--bg-hover); }
