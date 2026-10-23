@@ -2,6 +2,7 @@
  * Paroles synchronisées : Deezer (mot à mot le plus souvent), LRCLIB, NetEase ; à défaut, le texte brut (Deezer,
  * LRCLIB, Genius) est synchronisé par estimation. Les réponses sont gardées en mémoire, le CDN prend le relais pour les titres publics.
  */
+import { env } from '../config.js';
 import { ytMusicLyrics } from './ytmusic.js';
 
 const API = 'https://lrclib.net/api';
@@ -12,7 +13,11 @@ const CACHE_MAX = 500;
 export type LyricLine = { time: number; text: string; words?: { time: number; end?: number; text: string }[] };
 /** `unavailable` : LRCLIB n'a pas répondu (réessayer plus tard), à distinguer de « pas de paroles ». */
 /** `estimated` : horodatage deviné à partir du texte brut (aucune source synchronisée trouvée). */
-export type Lyrics = { synced: LyricLine[] | null; plain: string | null; unavailable?: boolean; estimated?: boolean };
+/**
+ * `geniusSongId` : paroles repérées sur Genius, mais que Genius a refusé de servir au serveur ; le navigateur peut
+ * les lire lui-même (fichier d'intégration ouvert à tous les sites) et les synchroniser par estimation.
+ */
+export type Lyrics = { synced: LyricLine[] | null; plain: string | null; unavailable?: boolean; estimated?: boolean; geniusSongId?: number };
 type LrclibRecord = { duration: number; instrumental: boolean; plainLyrics: string | null; syncedLyrics: string | null };
 
 const cache = new Map<string, { lyrics: Lyrics; expires: number }>();
@@ -177,16 +182,31 @@ async function geniusEmbedLyrics(songId: number): Promise<string | null> {
   return divContents(html, /<div class="rg_embed_body">/g)[0] ?? null;
 }
 
-async function geniusPlain(title: string, artist: string): Promise<string | null> {
-  const res = await fetch(`https://genius.com/api/search/song?${new URLSearchParams({ q: `${artist} ${title}`, per_page: '5' })}`, {
+type GeniusHit = { result: { id: number; title: string; url: string; primary_artist?: { name: string } } };
+
+/** Recherche Genius : API officielle si un jeton est configuré, sinon la recherche du site. */
+async function geniusSearch(query: string): Promise<GeniusHit[]> {
+  if (env.GENIUS_ACCESS_TOKEN) {
+    const res = await fetch(`https://api.genius.com/search?${new URLSearchParams({ q: query, per_page: '10' })}`, {
+      headers: { authorization: `Bearer ${env.GENIUS_ACCESS_TOKEN}` },
+      signal: AbortSignal.timeout(6000),
+    });
+    if (!res.ok) throw new Error(`Genius (API) HTTP ${res.status}`);
+    return ((await res.json()) as { response?: { hits?: GeniusHit[] } }).response?.hits ?? [];
+  }
+  const res = await fetch(`https://genius.com/api/search/song?${new URLSearchParams({ q: query, per_page: '5' })}`, {
     headers: GENIUS_HEADERS,
     signal: AbortSignal.timeout(6000),
   });
   if (!res.ok) throw new Error(`Genius (recherche) HTTP ${res.status}`);
-  const found = (await res.json()) as { response?: { sections?: { hits?: { result: { id: number; title: string; url: string; primary_artist?: { name: string } } }[] }[] } };
+  return ((await res.json()) as { response?: { sections?: { hits?: GeniusHit[] }[] } }).response?.sections?.[0]?.hits ?? [];
+}
+
+async function geniusPlain(title: string, artist: string): Promise<string | { songId: number } | null> {
+  const hits = await geniusSearch(`${artist} ${title}`);
   const wantedArtist = normalize(artist);
   const wantedTitle = normalize(title);
-  const candidates = (found.response?.sections?.[0]?.hits ?? [])
+  const candidates = hits
     .map((h) => h.result)
     .filter((r) => {
       const a = normalize(r.primary_artist?.name ?? '');
@@ -201,7 +221,8 @@ async function geniusPlain(title: string, artist: string): Promise<string | null
   if (!body) {
     const page = await fetch(song.url, { headers: GENIUS_HEADERS, signal: AbortSignal.timeout(8000) });
     if (page.status === 404) return null;
-    if (!page.ok) throw new Error(`Genius (page) HTTP ${page.status}`);
+    // Genius refuse le serveur : le navigateur prendra le relais avec l'identifiant du morceau.
+    if (!page.ok) return { songId: song.id };
     body = divContents(await page.text(), /<div[^>]*data-lyrics-container="true"[^>]*>/g)
       // En-tête (contributeurs, traductions) que Genius place dans le premier bloc.
       .map((block) => stripDivs(block, /<div[^>]*data-exclude-from-selection="true"[^>]*>/))
@@ -420,16 +441,20 @@ export async function findLyrics(
       lyrics = { synced: shiftLines(deezer.synced, deezer.shift), plain: deezer.plain, estimated: true };
     } else {
       // 6. Texte brut (Deezer, YouTube Music, LRCLIB, Genius) synchronisé par estimation.
-      const plain = record?.instrumental ? null : deezer?.plain ?? ytm?.plain ?? lrc.plain ?? (await geniusPromise);
-      lyrics = plain && track.durationMs ? { synced: estimateSync(plain, track.durationMs), plain, estimated: true } : { synced: null, plain: null };
+      const known = record?.instrumental ? null : deezer?.plain ?? ytm?.plain ?? lrc.plain;
+      const genius = known || record?.instrumental ? null : await geniusPromise;
+      const plain = known ?? (typeof genius === 'string' ? genius : null);
+      if (plain && track.durationMs) lyrics = { synced: estimateSync(plain, track.durationMs), plain, estimated: true };
+      else if (genius && typeof genius === 'object') lyrics = { synced: null, plain: null, geniusSongId: genius.songId };
+      else lyrics = { synced: null, plain: null };
     }
   }
 
-  const found = Boolean(lyrics.synced || lyrics.plain);
+  const found = Boolean(lyrics.synced || lyrics.plain || lyrics.geniusSongId);
   // Une source en panne et rien ailleurs : on le dit, sans mémoriser l'échec (la prochaine demande réessaiera).
   if (!found && (lrclib.down || sourceFailed)) return { synced: null, plain: null, unavailable: true };
   // Paroles trouvées : gardées 6 h. Rien trouvé : 10 min seulement (une base peut les ajouter, ou un raté passager).
   if (cache.size >= CACHE_MAX) cache.delete(cache.keys().next().value!);
-  cache.set(key, { lyrics, expires: Date.now() + (found && !lrclib.down && !sourceFailed ? 6 * 3600_000 : 10 * 60_000) });
+  cache.set(key, { lyrics, expires: Date.now() + (found && !lyrics.geniusSongId && !lrclib.down && !sourceFailed ? 6 * 3600_000 : 10 * 60_000) });
   return lyrics;
 }

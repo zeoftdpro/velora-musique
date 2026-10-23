@@ -75,7 +75,8 @@ export type ImportSource = {
 export type LyricLine = { time: number; text: string; /** Mot à mot, quand la source le fournit. */ words?: { time: number; end?: number; text: string }[] };
 /** `unavailable` : le service de paroles n'a pas répondu (réessayer), à distinguer de « pas de paroles ». */
 /** `estimated` : horodatage deviné à partir du texte brut (aucune version synchronisée trouvée). */
-export type Lyrics = { synced: LyricLine[] | null; plain: string | null; unavailable?: boolean; estimated?: boolean };
+/** `geniusSongId` : paroles sur Genius que le serveur n'a pas pu lire ; le navigateur les récupère lui-même. */
+export type Lyrics = { synced: LyricLine[] | null; plain: string | null; unavailable?: boolean; estimated?: boolean; geniusSongId?: number };
 export type Session = { user: User; accessToken: string; expiresIn: number };
 
 // ---------------------------------------------------------------------------

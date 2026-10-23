@@ -52,6 +52,9 @@ const EnvSchema = z.object({
   YOUTUBE_API_KEY: optionalString,
   // Pays pour lequel les vidéos doivent être lisibles (ISO 3166-1 alpha-2).
   YOUTUBE_REGION_CODE: z.string().length(2).default('FR'),
+  // Jeton de l'API officielle Genius (gratuit, genius.com/api-clients) : sa recherche reste ouverte aux serveurs,
+  // contrairement à celle du site, qui refuse une partie des requêtes venant d'hébergeurs comme Vercel.
+  GENIUS_ACCESS_TOKEN: optionalString,
 });
 
 const parsed = EnvSchema.safeParse(process.env);

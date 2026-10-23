@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, type LyricLine, type Lyrics } from '../api';
+import { geniusLyricsInBrowser } from '../genius';
 import { useLibrary } from '../context/library';
 import { usePlayer, useProgress, useVideoSlot } from '../context/player';
 import { useAsync, useCoverColor, useMediaQuery } from '../hooks';
@@ -44,7 +45,12 @@ function FullscreenView() {
   // Nouvelle tentative (sans cache) : bouton « Réessayer », ou automatiquement une fois après une panne passagère.
   const [attempt, setAttempt] = useState(0);
   useEffect(() => setAttempt(0), [track.id]);
-  const { data: lyrics, loading: lyricsLoading, error: lyricsError } = useAsync(() => api.lyrics(track.id, attempt > 0), [track.id, attempt]);
+  const { data: lyrics, loading: lyricsLoading, error: lyricsError } = useAsync(async () => {
+    const found = await api.lyrics(track.id, attempt > 0);
+    // Paroles repérées sur Genius mais refusées au serveur : le navigateur les lit lui-même.
+    if (!found.synced && found.geniusSongId) return (await geniusLyricsInBrowser(found.geniusSongId, track.durationMs).catch(() => null)) ?? found;
+    return found;
+  }, [track.id, attempt]);
   const retryLyrics = () => setAttempt((n) => n + 1);
   useEffect(() => {
     if (attempt > 0 || !(lyricsError || lyrics?.unavailable)) return;
