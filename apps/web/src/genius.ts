@@ -11,11 +11,11 @@ export async function geniusLyricsInBrowser(songId: number, durationMs: number):
   const literal = (await res.text()).match(/JSON\.parse\('((?:[^'\\]|\\.)*)'\)/)?.[1];
   if (!literal) return null;
   const html = JSON.parse(literal.replace(/\\(.)/g, '$1')) as string;
-  const doc = new DOMParser().parseFromString(html, 'text/html');
-  const body = doc.querySelector('.rg_embed_body');
+  const body = new DOMParser().parseFromString(html, 'text/html').querySelector('.rg_embed_body');
   if (!body) return null;
-  body.querySelectorAll('br').forEach((br) => br.replaceWith('\n'));
-  const plain = (body.textContent ?? '')
+  // Chaque <br> y est suivi d'un saut de ligne : un seul retour à la ligne au total (sinon, une pause par ligne).
+  const text = new DOMParser().parseFromString(body.innerHTML.replace(/<br\s*\/?>\n?/g, '\n'), 'text/html').body.textContent ?? '';
+  const plain = text
     .split('\n')
     .map((l) => l.trim())
     // Repères de structure (« [Couplet 1] ») : une pause entre les parties.
