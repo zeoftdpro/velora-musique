@@ -799,6 +799,10 @@ input.import-card__name:focus { border-color: var(--text); }
   align-items: center; max-width: 1400px; width: 100%; margin: 0 auto; padding: 8px clamp(0px, 3vw, 48px) 0;
 }
 .fs__body--solo { grid-template-columns: minmax(300px, 520px); justify-content: center; }
+/* Pas de paroles : le clip et ses sous-titres en grand. */
+.fs__body--captions { grid-template-columns: minmax(300px, 860px); }
+.fs__captions-note { margin: 0; font-size: 13px; line-height: 1.5; color: rgba(255, 255, 255, 0.7); }
+.fs__captions-note button { color: white; font-weight: 600; text-decoration: underline; }
 .fs__player { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .fs__media { width: 100%; aspect-ratio: 1; border-radius: 14px; overflow: hidden; box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5); background: rgba(0, 0, 0, 0.3); }
 .fs__media--video { aspect-ratio: 16 / 9; background: #000; }

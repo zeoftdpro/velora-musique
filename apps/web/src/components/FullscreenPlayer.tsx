@@ -67,9 +67,29 @@ function FullscreenView() {
   const videoSlot = useVideoSlot();
 
   const isYoutube = track.source === 'youtube';
-  const showVideo = isYoutube && media === 'video';
-  const showLyrics = narrow ? mobileView === 'lyrics' : !lyricsHidden;
+  // Aucune parole écrite nulle part (titre YouTube) : le clip prend toute la place, avec ses sous-titres, seule
+  // version synchronisée à la voix qui existe.
+  const captionsMode = isYoutube && !lyricsLoading && !lyricsError && Boolean(lyrics) && !lyrics!.synced && !lyrics!.plain && !lyrics!.unavailable;
+  const showVideo = isYoutube && (media === 'video' || captionsMode);
+  const showLyrics = captionsMode ? false : narrow ? mobileView === 'lyrics' : !lyricsHidden;
   const liked = favoriteIds.has(track.id);
+
+  // Sous-titres activés d'office en mode « sous-titres », puis retirés pour le titre suivant s'il a des paroles,
+  // ou à la fermeture (sauf si on les avait allumés soi-même).
+  const autoCaptions = useRef(false);
+  useEffect(() => {
+    if (captionsMode && !videoCaptions) {
+      autoCaptions.current = true;
+      setVideoCaptions(true);
+    } else if (!captionsMode && !lyricsLoading && autoCaptions.current) {
+      autoCaptions.current = false;
+      setVideoCaptions(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [captionsMode, lyricsLoading]);
+  useEffect(() => () => {
+    if (autoCaptions.current) setVideoCaptions(false);
+  }, [setVideoCaptions]);
 
   const close = () => {
     if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
@@ -146,13 +166,19 @@ function FullscreenView() {
         </div>
       </header>
 
-      <div className={`fs__body ${showLyrics ? '' : 'fs__body--solo'} ${narrow && showLyrics ? 'fs__body--lyrics' : ''}`}>
+      <div className={`fs__body ${showLyrics ? '' : 'fs__body--solo'} ${captionsMode ? 'fs__body--captions' : ''} ${narrow && showLyrics ? 'fs__body--lyrics' : ''}`}>
         <section className={`fs__player ${narrow && showLyrics ? 'fs__player--compact' : ''}`}>
           <div className={`fs__media ${showVideo ? 'fs__media--video' : ''}`}>
             {/* Emplacement du clip : le lecteur YouTube vient s'y superposer ; masqué, il rend la place à la pochette. */}
             <div className="fs__video" ref={videoSlot} hidden={!showVideo} />
             {!showVideo && <Cover src={track.album.coverUrl} alt={track.album.title} />}
           </div>
+          {captionsMode && (
+            <p className="fs__captions-note">
+              Les paroles de ce titre n’ont été publiées nulle part : voici les sous-titres de la vidéo, synchronisés par YouTube.{' '}
+              <button onClick={retryLyrics}>Chercher à nouveau</button>
+            </p>
+          )}
           <div className="fs__info">
             <div className="fs__titles">
               <Link to={`/album/${track.album.id}`} onClick={close} className="fs__title">{track.title}</Link>
