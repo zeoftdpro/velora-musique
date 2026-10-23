@@ -182,7 +182,8 @@ export const api = {
   artist: (id: string) => request<ArtistDetail>(`/artists/${id}`),
   tracks: (params: { genre?: string; limit?: number } = {}) => request<Track[]>(`/tracks?${new URLSearchParams(clean(params))}`),
   track: (id: string) => request<Track>(`/tracks/${id}`),
-  lyrics: (id: string) => request<Lyrics>(`/tracks/${id}/lyrics`),
+  /** `refresh` : nouvelle recherche, sans les caches (après une panne ou « Chercher à nouveau »). */
+  lyrics: (id: string, refresh = false) => request<Lyrics>(`/tracks/${id}/lyrics${refresh ? '?refresh=1' : ''}`),
   search: (q: string, genre?: string) => request<SearchResults>(`/search?${new URLSearchParams(clean({ q, genre }))}`),
   searchWeb: (q: string) => request<WebSearchResults>(`/search/web?${new URLSearchParams({ q })}`),
 

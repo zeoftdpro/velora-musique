@@ -41,7 +41,16 @@ function FullscreenView() {
   const { favoriteIds, toggleFavorite } = useLibrary();
   const narrow = useMediaQuery(NARROW);
   const tint = useCoverColor(track.album.coverUrl, track.title);
-  const { data: lyrics, loading: lyricsLoading, error: lyricsError, reload: reloadLyrics } = useAsync(() => api.lyrics(track.id), [track.id]);
+  // Nouvelle tentative (sans cache) : bouton « Réessayer », ou automatiquement une fois après une panne passagère.
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => setAttempt(0), [track.id]);
+  const { data: lyrics, loading: lyricsLoading, error: lyricsError } = useAsync(() => api.lyrics(track.id, attempt > 0), [track.id, attempt]);
+  const retryLyrics = () => setAttempt((n) => n + 1);
+  useEffect(() => {
+    if (attempt > 0 || !(lyricsError || lyrics?.unavailable)) return;
+    const timer = setTimeout(() => setAttempt(1), 2500);
+    return () => clearTimeout(timer);
+  }, [attempt, lyricsError, lyrics]);
   const [media, setMedia] = useState(readMedia);
   const [mobileView, setMobileView] = useState<'player' | 'lyrics'>('player');
   const [lyricsHidden, setLyricsHidden] = useState(false);
@@ -168,7 +177,7 @@ function FullscreenView() {
 
         {showLyrics && (
           <section className="fs__lyrics" aria-label="Paroles">
-            <LyricsBody lyrics={lyrics} loading={lyricsLoading} failed={Boolean(lyricsError || lyrics?.unavailable)} onRetry={reloadLyrics} offset={offset}
+            <LyricsBody lyrics={lyrics} loading={lyricsLoading} failed={Boolean(lyricsError || lyrics?.unavailable)} onRetry={retryLyrics} offset={offset}
               onShowCaptions={isYoutube ? () => { chooseMedia('video'); setVideoCaptions(true); if (narrow) setMobileView('player'); } : undefined}
               captionsOn={showVideo && videoCaptions} />
           </section>
@@ -215,11 +224,11 @@ function LyricsBody({ lyrics, loading, failed, onRetry, offset, onShowCaptions, 
     return (
       <div className="fs-lyrics__empty">
         <p>Aucune base de paroles ne connaît ce titre.</p>
-        {captionsOn ? (
-          <p className="fs-lyrics__hint">Les sous-titres de la vidéo s’affichent sur le clip, quand YouTube en propose.</p>
-        ) : (
-          <button className="btn fs-lyrics__retry" onClick={onShowCaptions}>Afficher les sous-titres de la vidéo</button>
-        )}
+        {captionsOn && <p className="fs-lyrics__hint">Les sous-titres de la vidéo s’affichent sur le clip, quand YouTube en propose.</p>}
+        <div className="fs-lyrics__actions">
+          {!captionsOn && <button className="btn fs-lyrics__retry" onClick={onShowCaptions}>Afficher les sous-titres de la vidéo</button>}
+          <button className="btn fs-lyrics__retry fs-lyrics__retry--ghost" onClick={onRetry}>Chercher à nouveau</button>
+        </div>
       </div>
     );
   }

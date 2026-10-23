@@ -15,7 +15,7 @@ export type LyricLine = { time: number; text: string; words?: { time: number; en
 export type Lyrics = { synced: LyricLine[] | null; plain: string | null; unavailable?: boolean; estimated?: boolean };
 type LrclibRecord = { duration: number; instrumental: boolean; plainLyrics: string | null; syncedLyrics: string | null };
 
-const cache = new Map<string, Lyrics>();
+const cache = new Map<string, { lyrics: Lyrics; expires: number }>();
 const toMs = (min: string, sec: string) => Math.round((Number(min) * 60 + Number(sec)) * 1000);
 
 /** « [01:23.45] texte » → { time: 83450, text } ; les lignes vides (pauses) sont gardées. */
@@ -93,13 +93,11 @@ const CREDIT = /^(作词|作曲|编曲|制作|混音|母带|监制|出品|和声
 
 const normalize = (s: string) => s.normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
-async function neteaseJson<T>(path: string, params: Record<string, string>): Promise<T | null> {
-  try {
-    const res = await fetch(`${NETEASE}/${path}?${new URLSearchParams(params)}`, { headers: NETEASE_HEADERS, signal: AbortSignal.timeout(6000) });
-    return res.ok ? ((await res.json()) as T) : null;
-  } catch {
-    return null;
-  }
+/** Les sources de secours signalent leurs pannes (exception), à ne pas confondre avec « pas de paroles » (null). */
+async function neteaseJson<T>(path: string, params: Record<string, string>): Promise<T> {
+  const res = await fetch(`${NETEASE}/${path}?${new URLSearchParams(params)}`, { headers: NETEASE_HEADERS, signal: AbortSignal.timeout(6000) });
+  if (!res.ok) throw new Error(`NetEase HTTP ${res.status}`);
+  return (await res.json()) as T;
 }
 
 type NeteaseSong = { id: number; name: string; duration: number; artists: { name: string }[] };
@@ -160,42 +158,41 @@ const decodeHtml = (s: string) =>
     .replace(/&(amp|quot|apos|lt|gt|nbsp);/g, (_, e: string) => ({ amp: '&', quot: '"', apos: "'", lt: '<', gt: '>', nbsp: ' ' })[e]!);
 
 async function geniusPlain(title: string, artist: string): Promise<string | null> {
-  try {
-    const res = await fetch(`https://genius.com/api/search/song?${new URLSearchParams({ q: `${artist} ${title}`, per_page: '5' })}`, {
-      headers: GENIUS_HEADERS,
-      signal: AbortSignal.timeout(6000),
+  const res = await fetch(`https://genius.com/api/search/song?${new URLSearchParams({ q: `${artist} ${title}`, per_page: '5' })}`, {
+    headers: GENIUS_HEADERS,
+    signal: AbortSignal.timeout(6000),
+  });
+  if (!res.ok) throw new Error(`Genius HTTP ${res.status}`);
+  const body = (await res.json()) as { response?: { sections?: { hits?: { result: { title: string; url: string; primary_artist?: { name: string } } }[] }[] } };
+  const wantedArtist = normalize(artist);
+  const wantedTitle = normalize(title);
+  const candidates = (body.response?.sections?.[0]?.hits ?? [])
+    .map((h) => h.result)
+    .filter((r) => {
+      const a = normalize(r.primary_artist?.name ?? '');
+      const t = normalize(r.title);
+      return (a.includes(wantedArtist) || wantedArtist.includes(a)) && (t.includes(wantedTitle) || wantedTitle.includes(t));
     });
-    if (!res.ok) return null;
-    const body = (await res.json()) as { response?: { sections?: { hits?: { result: { title: string; url: string; primary_artist?: { name: string } } }[] }[] } };
-    const wantedArtist = normalize(artist);
-    const wantedTitle = normalize(title);
-    const song = body.response?.sections?.[0]?.hits
-      ?.map((h) => h.result)
-      .find((r) => {
-        const a = normalize(r.primary_artist?.name ?? '');
-        const t = normalize(r.title);
-        return (a.includes(wantedArtist) || wantedArtist.includes(a)) && (t.includes(wantedTitle) || wantedTitle.includes(t));
-      });
-    if (!song) return null;
-    const page = await fetch(song.url, { headers: GENIUS_HEADERS, signal: AbortSignal.timeout(8000) });
-    if (!page.ok) return null;
-    const html = await page.text();
-    const text = divContents(html, /<div[^>]*data-lyrics-container="true"[^>]*>/g)
-      // En-tête (contributeurs, traductions) que Genius place dans le premier bloc.
-      .map((block) => stripDivs(block, /<div[^>]*data-exclude-from-selection="true"[^>]*>/))
-      .join('\n')
-      .replace(/<br\s*\/?>/g, '\n')
-      .replace(/<[^>]+>/g, '');
-    const lines = decodeHtml(text)
-      .split('\n')
-      .map((l) => l.trim())
-      // Repères de structure (« [Couplet 1] », « [Refrain] ») : remplacés par une pause entre les parties.
-      .map((l) => (/^\[.*\]$/.test(l) ? '' : l));
-    const plain = lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
-    return plain.split('\n').filter(Boolean).length >= 4 ? plain : null;
-  } catch {
-    return null;
-  }
+  // Plusieurs versions (« Freestyle (2022) », « Freestyle (2025) ») : le titre exact d'abord.
+  const song = candidates.find((r) => normalize(r.title) === wantedTitle) ?? candidates[0];
+  if (!song) return null;
+  const page = await fetch(song.url, { headers: GENIUS_HEADERS, signal: AbortSignal.timeout(8000) });
+  if (page.status === 404) return null;
+  if (!page.ok) throw new Error(`Genius HTTP ${page.status}`);
+  const html = await page.text();
+  const text = divContents(html, /<div[^>]*data-lyrics-container="true"[^>]*>/g)
+    // En-tête (contributeurs, traductions) que Genius place dans le premier bloc.
+    .map((block) => stripDivs(block, /<div[^>]*data-exclude-from-selection="true"[^>]*>/))
+    .join('\n')
+    .replace(/<br\s*\/?>/g, '\n')
+    .replace(/<[^>]+>/g, '');
+  const lines = decodeHtml(text)
+    .split('\n')
+    .map((l) => l.trim())
+    // Repères de structure (« [Couplet 1] », « [Refrain] ») : remplacés par une pause entre les parties.
+    .map((l) => (/^\[.*\]$/.test(l) ? '' : l));
+  const plain = lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  return plain.split('\n').filter(Boolean).length >= 4 ? plain : null;
 }
 
 // ---------- Dernier recours : synchronisation estimée du texte brut ----------
@@ -308,8 +305,8 @@ async function deezerLyrics(title: string, artist: string, seconds: number): Pro
         ? withPauses(byLine.map((l) => ({ time: l.milliseconds, end: l.milliseconds + l.duration, text: l.line })))
         : null;
     return { synced, plain: lyrics.text?.trim() || null, shift: seconds ? (seconds - hit.duration) * 1000 : 0 };
-  } catch {
-    return null;
+  } catch (error) {
+    throw new Error(`Deezer : ${(error as Error).message}`);
   }
 }
 
@@ -351,20 +348,31 @@ async function lrclibLookup(title: string, artist: string, album: string, second
 const SAME_VERSION_MS = 4000;
 
 /** `videoId` : vidéo YouTube jouée, pour les paroles que YouTube Music associe à cette vidéo précise. */
-export async function findLyrics(track: { title: string; artist: string; album: string; durationMs: number; videoId?: string | null }): Promise<Lyrics> {
+export async function findLyrics(
+  track: { title: string; artist: string; album: string; durationMs: number; videoId?: string | null },
+  { refresh = false } = {},
+): Promise<Lyrics> {
   const key = `${track.artist}|${track.title}|${Math.round(track.durationMs / 1000)}`;
   const hit = cache.get(key);
-  if (hit) return hit;
+  if (hit && hit.expires > Date.now() && !refresh) return hit.lyrics;
 
   const title = cleanTitle(track.title) || track.title;
   const artist = mainArtist(track.artist);
   const seconds = Math.round(track.durationMs / 1000);
   // Toutes les sources sont interrogées en parallèle : un titre absent de toutes les bases ne fait pas attendre
-  // la somme des délais. (Seule LRCLIB peut signaler une panne ; les autres renvoient null.)
-  const deezerPromise = deezerLyrics(title, artist, seconds);
-  const neteasePromise = neteaseSynced(title, artist, seconds);
-  const geniusPromise = geniusPlain(title, artist);
-  const ytmPromise = track.videoId ? ytMusicLyrics(track.videoId).catch(() => null) : Promise.resolve(null);
+  // la somme des délais. Une source en panne compte comme « rien trouvé », mais on s'en souvient : sans paroles
+  // au final, la réponse dira « indisponible » (à réessayer) plutôt que « pas de paroles ».
+  let sourceFailed = false;
+  const soft = <T,>(promise: Promise<T>) =>
+    promise.catch((error: Error) => {
+      sourceFailed = true;
+      console.warn('Source de paroles en panne :', error.message);
+      return null;
+    });
+  const deezerPromise = soft(deezerLyrics(title, artist, seconds));
+  const neteasePromise = soft(neteaseSynced(title, artist, seconds));
+  const geniusPromise = soft(geniusPlain(title, artist));
+  const ytmPromise = track.videoId ? soft(ytMusicLyrics(track.videoId)) : Promise.resolve(null);
   const [deezer, lrclib, ytm] = await Promise.all([deezerPromise, lrclibLookup(title, artist, track.album, seconds), ytmPromise]);
   const { record } = lrclib;
   const lrc = toLyrics(record);
@@ -394,9 +402,11 @@ export async function findLyrics(track: { title: string; artist: string; album: 
     }
   }
 
-  // LRCLIB injoignable et rien ailleurs : on le dit, sans mémoriser l'échec (la prochaine demande réessaiera).
-  if (lrclib.down) return lyrics.synced || lyrics.plain ? lyrics : { synced: null, plain: null, unavailable: true };
+  const found = Boolean(lyrics.synced || lyrics.plain);
+  // Une source en panne et rien ailleurs : on le dit, sans mémoriser l'échec (la prochaine demande réessaiera).
+  if (!found && (lrclib.down || sourceFailed)) return { synced: null, plain: null, unavailable: true };
+  // Paroles trouvées : gardées 6 h. Rien trouvé : 10 min seulement (une base peut les ajouter, ou un raté passager).
   if (cache.size >= CACHE_MAX) cache.delete(cache.keys().next().value!);
-  cache.set(key, lyrics);
+  cache.set(key, { lyrics, expires: Date.now() + (found && !lrclib.down && !sourceFailed ? 6 * 3600_000 : 10 * 60_000) });
   return lyrics;
 }

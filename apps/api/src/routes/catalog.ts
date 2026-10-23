@@ -103,6 +103,8 @@ export default async function catalogRoutes(app: FastifyInstance) {
 
   app.get('/tracks/:id/lyrics', { preHandler: app.optionalAuth }, async (req, reply) => {
     const { id } = parse(IdParams, req.params);
+    // « Chercher à nouveau » : contourne les caches (mémoire et CDN, l'adresse étant différente).
+    const refresh = (req.query as { refresh?: string }).refresh === '1';
     const [row] = await selectTracks(eq(tracks.id, id), req.user?.sub);
     if (!row) throw notFound('Titre');
     const lyrics = await findLyrics({
@@ -111,13 +113,13 @@ export default async function catalogRoutes(app: FastifyInstance) {
       album: row.albumTitle,
       durationMs: row.durationMs,
       videoId: videoIdOf(row.externalId),
-    });
+    }, { refresh });
     // Titres publics : mêmes paroles pour tout le monde, le CDN peut les garder.
     // Service indisponible : rien en cache, la prochaine demande réessaiera. Rien de trouvé : cache court.
     const found = Boolean(lyrics.synced || lyrics.plain);
     reply.header(
       'cache-control',
-      lyrics.unavailable ? 'no-store' : row.ownerId ? 'private, max-age=3600' : found ? 'public, max-age=3600, s-maxage=86400' : 'public, max-age=600, s-maxage=3600',
+      lyrics.unavailable || refresh ? 'no-store' : row.ownerId ? 'private, max-age=3600' : found ? 'public, max-age=3600, s-maxage=86400' : 'public, max-age=300, s-maxage=600',
     );
     return lyrics;
   });
