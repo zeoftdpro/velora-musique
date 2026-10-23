@@ -21,7 +21,7 @@ export function ArtistPage() {
 
   return (
     <div className="page page--tinted" style={{ '--tint': tint } as React.CSSProperties}>
-      <Hero kind="Artiste" title={artist.name} round
+      <Hero kind="Artiste" title={artist.name} round backdrop={image}
         cover={{ src: image, alt: artist.name }}
         meta={<span>{artist.albums.length} album{artist.albums.length > 1 ? 's' : ''}</span>}>
         <BigPlayButton {...play} disabled={artist.topTracks.length === 0} />

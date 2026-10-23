@@ -14,13 +14,19 @@ import { AlbumPage } from './pages/Album';
 import { ArtistPage } from './pages/Artist';
 import { AuthPage } from './pages/Auth';
 import { HomePage } from './pages/Home';
+import { ImportPage } from './pages/Import';
 import { LibraryPage, LikedPage } from './pages/Library';
+import { LyricsPage } from './pages/Lyrics';
 import { PlaylistPage } from './pages/Playlist';
 import { SearchPage } from './pages/Search';
 import { TrackPage } from './pages/Track';
 import { setupPwa } from './pwa';
+import { initTheme } from './theme';
+import '@fontsource-variable/geist';
+import '@fontsource-variable/geist-mono';
 import './styles.css';
 
+initTheme();
 setupPwa();
 // Netlify (offre gratuite) ajoute un badge non masquable en bas à droite : on lui réserve sa place pour qu'il ne couvre pas le volume.
 if (document.querySelector('script[data-nf-variant]')) document.documentElement.classList.add('has-host-badge');
@@ -69,6 +75,8 @@ createRoot(document.getElementById('root')!).render(
                 <Route path="artist/:id" element={<ArtistPage />} />
                 <Route path="playlist/:id" element={<PlaylistPage />} />
                 <Route path="track/:id" element={<TrackPage />} />
+                <Route path="import" element={<ImportPage />} />
+                <Route path="lyrics" element={<LyricsPage />} />
                 <Route path="account" element={<AccountPage />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Route>

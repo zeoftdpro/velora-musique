@@ -62,7 +62,7 @@ type Video = {
   status: { embeddable: boolean; privacyStatus: string };
 };
 
-type Parsed = { videoId: string; title: string; artist: string; album: string | null; year: number | null; cover: string | null; durationMs: number; score: number };
+export type Parsed = { videoId: string; title: string; artist: string; album: string | null; year: number | null; cover: string | null; durationMs: number; score: number };
 
 const decodeEntities = (s: string) =>
   s.replace(/&(amp|quot|#39|apos|lt|gt);/g, (_, e: string) => ({ amp: '&', quot: '"', '#39': "'", apos: "'", lt: '<', gt: '>' })[e]!);
@@ -77,7 +77,7 @@ function parseDuration(iso: string) {
 // Mentions parasites entre parenthèses/crochets : « (Official Video) », « [Clip Officiel] », « (Lyrics) »…
 const BRACKET_NOISE =
   /\s*[([【][^)\]】]*\b(official|officiel(?:le)?|vid[eé]o|clip|audio|lyrics?|paroles|visuali[sz]er|hd|hq|4k|mv|m\/v)\b[^)\]】]*[)\]】]/gi;
-const cleanTitle = (t: string) =>
+export const cleanTitle = (t: string) =>
   t.replace(BRACKET_NOISE, '').replace(/\s+[|｜].*$/, '').replace(/\s{2,}/g, ' ').trim();
 
 /**
@@ -189,7 +189,7 @@ function uniqueBy<T>(items: T[], key: (item: T) => string) {
 }
 
 /** Enregistre les vidéos (artistes, albums, titres) ; renvoie les ids locaux dans l'ordre de classement. */
-async function upsertVideos(items: Parsed[]): Promise<string[]> {
+export async function upsertVideos(items: Parsed[]): Promise<string[]> {
   if (items.length === 0) return [];
   const artistKey = (p: Parsed) => slugify(p.artist);
 
@@ -251,4 +251,25 @@ export async function searchYoutube(query: string, limit: number): Promise<strin
 /** Vrai si `searchYoutube(query, limit)` serait servie par le cache, sans consommer de quota. */
 export const isYoutubeSearchCached = (query: string, limit: number) => isCached('youtube', `${query}|${limit}`, CACHE_TTL_MS);
 
-export const videoIdOf =(externalId: string | null) => externalId?.match(/^youtube:([\w-]{11})$/)?.[1] ?? null;
+export const videoIdOf = (externalId: string | null) => externalId?.match(/^youtube:([\w-]{11})$/)?.[1] ?? null;
+
+/**
+ * Parmi ces vidéos, celles que leur propriétaire autorise dans un lecteur intégré (1 unité de quota pour 50 vidéos).
+ * Sans clé ou quota épuisé : null, on les suppose lisibles (le lecteur passe de toute façon les vidéos bloquées).
+ */
+export async function embeddableIds(ids: string[]): Promise<Set<string> | null> {
+  if (!youtubeEnabled || ids.length === 0) return null;
+  try {
+    const found = new Set<string>();
+    for (let i = 0; i < ids.length; i += 50) {
+      const { items } = await get<{ items: { id: string; status: { embeddable: boolean; privacyStatus: string } }[] }>('videos', {
+        part: 'status',
+        id: ids.slice(i, i + 50).join(','),
+      });
+      for (const v of items) if (v.status.embeddable && v.status.privacyStatus !== 'private') found.add(v.id);
+    }
+    return found;
+  } catch {
+    return null;
+  }
+}

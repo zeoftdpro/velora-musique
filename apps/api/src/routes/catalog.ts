@@ -7,6 +7,7 @@ import { notFound } from '../lib/errors.js';
 import { IdParams, Pagination, parse } from '../lib/validation.js';
 import { selectAlbums, selectTracks, toAlbumDto, toArtistDto, toTrackDto, visibleTo } from '../services/catalog.js';
 import { syncFromJamendo } from '../services/jamendo.js';
+import { findLyrics } from '../services/lyrics.js';
 import { search, searchWeb } from '../services/search.js';
 
 // `source=local` : uniquement le catalogue ingéré, sans les titres mis en cache depuis YouTube ou Jamendo.
@@ -97,6 +98,16 @@ export default async function catalogRoutes(app: FastifyInstance) {
     const [row] = await selectTracks(eq(tracks.id, id), req.user?.sub);
     if (!row) throw notFound('Titre');
     return toTrackDto(row);
+  });
+
+  app.get('/tracks/:id/lyrics', { preHandler: app.optionalAuth }, async (req, reply) => {
+    const { id } = parse(IdParams, req.params);
+    const [row] = await selectTracks(eq(tracks.id, id), req.user?.sub);
+    if (!row) throw notFound('Titre');
+    const lyrics = await findLyrics({ title: row.title, artist: row.artistName, album: row.albumTitle, durationMs: row.durationMs });
+    // Titres publics : mêmes paroles pour tout le monde, le CDN peut les garder.
+    reply.header('cache-control', row.ownerId ? 'private, max-age=3600' : 'public, max-age=3600, s-maxage=86400');
+    return lyrics;
   });
 
   app.get('/search', { preHandler: app.optionalAuth }, async (req) => {

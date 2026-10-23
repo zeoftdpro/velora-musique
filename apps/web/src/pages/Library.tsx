@@ -1,7 +1,7 @@
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { BigPlayButton, Hero } from '../components/Hero';
-import { HeartIcon, MusicIcon, PlusIcon, UploadIcon } from '../components/icons';
+import { HeartIcon, ImportIcon, MusicIcon, PlusIcon, UploadIcon } from '../components/icons';
 import { ErrorState, Loading } from '../components/States';
 import { TrackList } from '../components/TrackList';
 import { useDialog } from '../context/dialog';
@@ -50,6 +50,11 @@ export function LibraryPage() {
             <span>{p.trackCount} titre{p.trackCount > 1 ? 's' : ''}{p.isPublic ? ' · publique' : ''}</span>
           </Link>
         ))}
+        <Link to="/import" className="playlist-tile playlist-tile--import">
+          <ImportIcon size={28} />
+          <strong>Importer une playlist</strong>
+          <span>Depuis un lien Spotify, Deezer, Apple Music ou YouTube</span>
+        </Link>
         <button className="playlist-tile playlist-tile--new" onClick={pickFiles}>
           <UploadIcon size={28} />
           <strong>Téléverser des musiques</strong>

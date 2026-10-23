@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { formatDuration } from '../api';
 import { useLibrary } from '../context/library';
 import { usePlayer, useProgress } from '../context/player';
 import { Cover } from './Cover';
-import { PANEL_MEDIA, useMediaQuery } from '../hooks';
+import { PANEL_MEDIA, useCoverColor, useMediaQuery } from '../hooks';
 import { AddToPlaylistButton } from './AddToPlaylist';
-import { HeartIcon, NextIcon, PanelIcon, PauseIcon, PlayIcon, PrevIcon, RepeatIcon, ShuffleIcon, VideoIcon, VolumeIcon } from './icons';
+import { HeartIcon, LyricsIcon, NextIcon, PanelIcon, PauseIcon, PlayIcon, PrevIcon, RepeatIcon, ShuffleIcon, VideoIcon, VolumeIcon } from './icons';
 
 export function PlayerBar() {
   const {
@@ -19,9 +19,26 @@ export function PlayerBar() {
   const { favoriteIds, toggleFavorite } = useLibrary();
   const wide = useMediaQuery(PANEL_MEDIA);
   const repeatLabel = repeat === 'off' ? 'Répéter : désactivé' : repeat === 'all' ? 'Répéter : toute la file' : 'Répéter : ce titre';
+  const tint = useCoverColor(current?.album.coverUrl, current?.title ?? '');
+  const location = useLocation();
+  const navigate = useNavigate();
+  const onLyrics = location.pathname === '/lyrics';
+  // Les paroles s'ouvrent comme une page ; le même bouton ramène à la page précédente.
+  const toggleLyrics = () => {
+    if (!onLyrics) navigate('/lyrics');
+    else if (location.key !== 'default') navigate(-1);
+    else navigate('/'); // page ouverte directement : pas d'historique où revenir
+  };
+  const lyricsButton = (className: string) => (
+    <button className={`icon-btn ${className} ${onLyrics ? 'is-on' : ''}`} onClick={toggleLyrics} disabled={!current}
+      aria-label="Paroles" aria-pressed={onLyrics} title="Paroles">
+      <LyricsIcon size={18} />
+    </button>
+  );
 
   return (
-    <footer className={`player ${current ? '' : 'player--idle'}`} aria-label="Lecteur">
+    <footer className={`player ${current ? '' : 'player--idle'}`} aria-label="Lecteur"
+      style={current ? ({ '--tint': tint } as React.CSSProperties) : undefined}>
       <div className="player__now">
         {current ? (
           <>
@@ -56,6 +73,7 @@ export function PlayerBar() {
             aria-label={repeatLabel} title={repeatLabel}>
             <RepeatIcon size={18} one={repeat === 'one'} />
           </button>
+          {lyricsButton('player__lyrics-m')}
         </div>
         <SeekBar />
       </div>
@@ -68,6 +86,7 @@ export function PlayerBar() {
           </button>
         )}
         {quality && <span className="badge" title="Source ou qualité du flux en cours">{quality}</span>}
+        {lyricsButton('')}
         {wide && (
           <button className={`icon-btn ${panelOpen ? 'is-on' : ''}`} onClick={togglePanel}
             aria-label="Panneau « En cours de lecture »" aria-pressed={panelOpen} title="En cours de lecture">

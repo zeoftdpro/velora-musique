@@ -4,17 +4,20 @@ import { useToast } from '../context/toast';
 import { useShare } from '../share';
 import { PauseIcon, PlayIcon, ShareIcon } from './icons';
 
-export function Hero({ kind, title, cover, round, meta, children }: {
+export function Hero({ kind, title, cover, round, meta, backdrop, children }: {
   kind: string;
   title: string;
   cover: { src: string | null; alt: string } | ReactNode;
   round?: boolean;
   meta?: ReactNode;
+  /** Image floutée en fond de l'en-tête (page artiste). */
+  backdrop?: string | null;
   children?: ReactNode;
 }) {
   const isCoverData = cover !== null && typeof cover === 'object' && 'alt' in (cover as object);
   return (
     <header className="hero">
+      {backdrop && <div className="hero__backdrop" style={{ '--backdrop-img': `url("${backdrop}")` } as React.CSSProperties} aria-hidden />}
       <div className="hero__art">
         {isCoverData ? <Cover src={(cover as { src: string | null }).src} alt={(cover as { alt: string }).alt} round={round} /> : (cover as ReactNode)}
       </div>
@@ -42,7 +45,7 @@ export function ShareButton({ data, blocked }: { data: { title: string; text: st
 export function BigPlayButton({ playing, onClick, disabled }: { playing: boolean; onClick: () => void; disabled?: boolean }) {
   return (
     <button className="big-play" onClick={onClick} disabled={disabled} aria-label={playing ? 'Pause' : 'Lecture'}>
-      {playing ? <PauseIcon size={26} /> : <PlayIcon size={26} />}
+      {playing ? <PauseIcon size={18} /> : <PlayIcon size={18} />} {playing ? 'Pause' : 'Lecture'}
     </button>
   );
 }

@@ -8,7 +8,7 @@ import { useInstall } from '../pwa';
 import { InstallBanner } from './InstallBanner';
 import { NowPlayingPanel } from './NowPlaying';
 import { PlayerBar } from './PlayerBar';
-import { DownloadIcon, HeartIcon, HomeIcon, LibraryIcon, LogoMark, PlusIcon, SearchIcon, UserIcon } from './icons';
+import { DownloadIcon, HeartIcon, HomeIcon, ImportIcon, LibraryIcon, LogoMark, PlusIcon, SearchIcon, UserIcon } from './icons';
 
 export function Layout() {
   const { user } = useAuth();
@@ -37,6 +37,7 @@ export function Layout() {
           <NavLink to="/" end><HomeIcon /> <span>Accueil</span></NavLink>
           <NavLink to="/search"><SearchIcon /> <span>Rechercher</span></NavLink>
           <NavLink to="/library"><LibraryIcon /> <span>Bibliothèque</span></NavLink>
+          <NavLink to="/import"><ImportIcon /> <span>Importer</span></NavLink>
           <NavLink to="/account" className="nav__mobile-only"><UserIcon /> <span>Compte</span></NavLink>
         </nav>
 

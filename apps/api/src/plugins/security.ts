@@ -39,7 +39,7 @@ function hasValidProxySignature(header: unknown, secret: string) {
 }
 
 // Réponses à ne jamais garder en cache (navigateur, proxy) : elles contiennent des jetons ou des données personnelles.
-const PRIVATE_ROUTES = /^\/(auth|me|playlists|tracks\/[^/]+\/play)(\/|$|\?)/;
+const PRIVATE_ROUTES = /^\/(auth|me|playlists|imports|tracks\/[^/]+\/play)(\/|$|\?)/;
 
 export default fp(async (app) => {
   app.decorateRequest('clientIp', '');

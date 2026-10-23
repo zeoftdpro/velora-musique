@@ -7,6 +7,13 @@ import { usePlayer } from '../context/player';
 import { useToast } from '../context/toast';
 import { useTitle } from '../hooks';
 import { useInstall } from '../pwa';
+import { useTheme, type ThemeChoice } from '../theme';
+
+const THEMES: { value: ThemeChoice; label: string }[] = [
+  { value: 'light', label: 'Clair' },
+  { value: 'dark', label: 'Sombre' },
+  { value: 'system', label: 'Système' },
+];
 
 export function AccountPage() {
   useTitle('Compte');
@@ -15,6 +22,7 @@ export function AccountPage() {
   const dialog = useDialog();
   const install = useInstall();
   const { autoplay, toggleAutoplay } = usePlayer();
+  const [theme, setTheme] = useTheme();
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordBusy, setPasswordBusy] = useState(false);
   if (!user) return null;
@@ -94,6 +102,17 @@ export function AccountPage() {
             aria-label="Lecture automatique">
             <span className="switch__track"><span className="switch__thumb" /></span>
           </button>
+        </div>
+        <div className="setting">
+          <div>
+            <strong>Apparence</strong>
+            <p className="muted small">Thème clair, sombre, ou celui de votre appareil.</p>
+          </div>
+          <div className="segmented" role="radiogroup" aria-label="Thème">
+            {THEMES.map((t) => (
+              <button key={t.value} role="radio" aria-checked={theme === t.value} onClick={() => setTheme(t.value)}>{t.label}</button>
+            ))}
+          </div>
         </div>
       </section>
 

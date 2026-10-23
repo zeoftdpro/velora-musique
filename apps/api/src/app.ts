@@ -13,6 +13,7 @@ import securityPlugin from './plugins/security.js';
 import authRoutes from './routes/auth.js';
 import catalogRoutes from './routes/catalog.js';
 import fileRoutes from './routes/files.js';
+import importRoutes from './routes/imports.js';
 import meRoutes from './routes/me.js';
 import playlistRoutes from './routes/playlists.js';
 import streamRoutes from './routes/stream.js';
@@ -90,6 +91,7 @@ export async function buildApp() {
   await app.register(streamRoutes);
   await app.register(fileRoutes);
   await app.register(uploadRoutes);
+  await app.register(importRoutes);
   await app.register(shareRoutes);
 
   return app;

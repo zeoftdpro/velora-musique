@@ -10,7 +10,7 @@ import { useDialog } from '../context/dialog';
 import { useLibrary } from '../context/library';
 import { useToast } from '../context/toast';
 import { useUploads } from '../context/uploads';
-import { useAsync, useTitle } from '../hooks';
+import { useAsync, useCoverColor, useTitle } from '../hooks';
 import { shareUrls } from '../share';
 import { usePlayer } from '../context/player';
 import { usePlayList } from './Album';
@@ -29,6 +29,7 @@ export function PlaylistPage() {
   const source = playlist ? ({ kind: 'playlist', id: playlist.id } as const) : null;
   const play = usePlayList(playlist?.tracks, source);
   const { playlistChain, togglePlaylistChain } = usePlayer();
+  const tint = useCoverColor(playlist?.tracks[0]?.album.coverUrl, playlist?.name ?? '');
 
   if (loading && !playlist) return <Loading />;
   if (error || !playlist) return <ErrorState message={error ?? 'Playlist introuvable'} />;
@@ -65,7 +66,7 @@ export function PlaylistPage() {
   const covers = [...new Set(playlist.tracks.map((t) => t.album.coverUrl))].slice(0, 4);
 
   return (
-    <div className="page">
+    <div className="page page--tinted" style={{ '--tint': tint } as React.CSSProperties}>
       <Hero kind={playlist.isPublic ? 'Playlist publique' : 'Playlist'} title={playlist.name}
         cover={covers.length >= 4
           ? <div className="mosaic">{covers.map((c, i) => <Cover key={i} src={c} alt="" />)}</div>

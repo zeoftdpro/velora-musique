@@ -60,6 +60,19 @@ export type PlaylistDetail = PlaylistSummary & { isOwner: boolean; tracks: (Trac
 export type SearchResults = { tracks: Track[]; albums: Album[]; artists: Artist[] };
 export type WebSearchResults = { status: 'ok' | 'disabled' | 'quota' | 'error'; tracks: Track[] };
 export type Recommendations = { tracks: Track[]; basedOn: string[] };
+/** Morceau lu sur un autre service (Spotify, Deezer…), avant sa correspondance dans Velora. */
+export type SourceTrack = { title: string; artists: string[]; album: string | null; durationMs: number; coverUrl: string | null; videoId?: string };
+export type ImportSource = {
+  provider: 'spotify' | 'deezer' | 'apple' | 'youtube';
+  kind: 'playlist' | 'album' | 'track';
+  name: string;
+  coverUrl: string | null;
+  tracks: SourceTrack[];
+  /** La source compte plus de titres que ce qui a pu être lu (limite du service ou de Velora). */
+  truncated: boolean;
+};
+/** Paroles : `synced` horodatées à la ligne (ms), sinon texte brut. */
+export type Lyrics = { synced: { time: number; text: string }[] | null; plain: string | null };
 export type Session = { user: User; accessToken: string; expiresIn: number };
 
 // ---------------------------------------------------------------------------
@@ -166,6 +179,7 @@ export const api = {
   artist: (id: string) => request<ArtistDetail>(`/artists/${id}`),
   tracks: (params: { genre?: string; limit?: number } = {}) => request<Track[]>(`/tracks?${new URLSearchParams(clean(params))}`),
   track: (id: string) => request<Track>(`/tracks/${id}`),
+  lyrics: (id: string) => request<Lyrics>(`/tracks/${id}/lyrics`),
   search: (q: string, genre?: string) => request<SearchResults>(`/search?${new URLSearchParams(clean({ q, genre }))}`),
   searchWeb: (q: string) => request<WebSearchResults>(`/search/web?${new URLSearchParams({ q })}`),
 
@@ -204,6 +218,12 @@ export const api = {
       body: json({ fileName }),
       signal: AbortSignal.timeout(5 * 60_000),
     }),
+
+  /** Import par lien, étape 1 : lit la playlist, l'album ou le titre sur son service d'origine. */
+  importPreview: (url: string) => request<ImportSource>('/imports/preview', { method: 'POST', body: json({ url }) }),
+  /** Étape 2, par lots de 10 : retrouve les morceaux et les ajoute à la playlist (null : introuvable). */
+  importMatch: (tracks: SourceTrack[], playlistId?: string) =>
+    request<{ results: (Track | null)[] }>('/imports/match', { method: 'POST', body: json({ playlistId, tracks }) }),
 };
 
 /**

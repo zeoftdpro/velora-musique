@@ -3,10 +3,11 @@ import { Link } from 'react-router-dom';
 import { api, type Album, type Artist, type Track } from '../api';
 import { AlbumCard, ArtistCard, GenreTiles, Grid } from '../components/Cards';
 import { Cover } from '../components/Cover';
-import { PlayIcon, SearchIcon } from '../components/icons';
+import { ImportIcon, PlayIcon, SearchIcon } from '../components/icons';
 import { ErrorState, Loading } from '../components/States';
 import { TrackList } from '../components/TrackList';
 import { useAuth } from '../context/auth';
+import { useLibrary } from '../context/library';
 import { usePlayer } from '../context/player';
 import { useAsync, useTitle } from '../hooks';
 
@@ -23,6 +24,7 @@ export function HomePage() {
   useTitle(undefined);
   const { user } = useAuth();
   const { playQueue } = usePlayer();
+  const { playlists } = useLibrary();
   // Le catalogue « local » exclut les titres mis en cache par les recherches YouTube/Jamendo :
   // ceux-ci n'apparaissent sur l'accueil qu'une fois écoutés (section « Écoutés récemment »).
   const { data, error, loading } = useAsync(
@@ -61,6 +63,17 @@ export function HomePage() {
           <span>
             <strong>Trouvez n’importe quel titre</strong>
             <span className="muted">Artistes, albums, morceaux : votre catalogue et tout YouTube.</span>
+          </span>
+        </Link>
+      )}
+
+      {/* Pas encore de playlist à soi : on propose de ramener celles d'un autre service. */}
+      {!playlists.some((p) => p.kind !== 'uploads') && (
+        <Link to="/import" className="search-cta import-cta">
+          <span className="search-cta__icon"><ImportIcon size={26} /></span>
+          <span>
+            <strong>Ramenez vos playlists</strong>
+            <span className="muted">Collez un lien Spotify, Deezer, Apple Music ou YouTube : Velora recrée la playlist.</span>
           </span>
         </Link>
       )}

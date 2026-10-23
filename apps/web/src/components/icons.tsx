@@ -40,7 +40,7 @@ export const MinimizeIcon = (p: IconProps) => <Icon {...p}><path d="M4 14h6v6M20
 export const MaximizeIcon = (p: IconProps) => <Icon {...p}><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" /></Icon>;
 /** Bouton Partager d'iOS : carré ouvert surmonté d'une flèche. */
 export const ShareIcon = (p: IconProps) => <Icon {...p}><path d="M12 3v12M8 7l4-4 4 4M8 11H6v10h12V11h-2" /></Icon>;
-export const DownloadIcon =(p: IconProps) => <Icon {...p}><path d="M12 4v11M7 10l5 5 5-5M5 20h14" /></Icon>;
+export const DownloadIcon = (p: IconProps) => <Icon {...p}><path d="M12 4v11M7 10l5 5 5-5M5 20h14" /></Icon>;
 export const UploadIcon = (p: IconProps) => <Icon {...p}><path d="M12 15V4M7 9l5-5 5 5M5 20h14" /></Icon>;
 export const CheckIcon = (p: IconProps) => <Icon {...p}><path d="M5 12.5l4.5 4.5L19 7.5" /></Icon>;
 export const VideoIcon = (p: IconProps) => <Icon {...p}><rect x="3" y="6" width="13" height="12" rx="2" /><path d="M16 10.5l5-3v9l-5-3z" /></Icon>;
@@ -57,6 +57,11 @@ export const RepeatIcon = ({ one, ...p }: IconProps & { one?: boolean }) => (
 export const PanelIcon = (p: IconProps) => <Icon {...p}><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M15 4v16" /></Icon>;
 export const QueueIcon = (p: IconProps) => <Icon {...p}><path d="M4 6h16M4 12h16M4 18h10M18 16l3 2-3 2z" /></Icon>;
 export const MusicIcon = (p: IconProps) => <Icon {...p}><path d="M9 18V5l11-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="17" cy="16" r="3" /></Icon>;
+export const LinkIcon = (p: IconProps) => <Icon {...p}><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1" /></Icon>;
+/** Import : flèche qui entre dans un plateau. */
+export const ImportIcon = (p: IconProps) => <Icon {...p}><path d="M12 3v11M7.5 9.5L12 14l4.5-4.5M4 14v5a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-5" /></Icon>;
+/** Paroles : bulle de texte. */
+export const LyricsIcon = (p: IconProps) => <Icon {...p}><path d="M5 4h14a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1h-8l-5 4v-4H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zM8 8.5h8M8 12.5h5" /></Icon>;
 export const LogoMark = ({ size = 28 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true">
     <defs>
