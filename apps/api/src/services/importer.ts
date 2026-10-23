@@ -1,7 +1,7 @@
 import { HttpError } from '../lib/errors.js';
 import { cachedSearch } from '../lib/search-cache.js';
 import { cleanTitle, embeddableIds, upsertVideos, type Parsed } from './youtube.js';
-import { browsePlaylist, searchSongs, type YtmTrack } from './ytmusic.js';
+import { browsePlaylist, searchYtMusic, type YtmTrack } from './ytmusic.js';
 
 /**
  * Import de playlists, albums et titres depuis un lien Spotify, Deezer, Apple Music ou YouTube.
@@ -291,7 +291,7 @@ function score(source: SourceTrack, candidate: YtmTrack, rank: number) {
 /** Meilleurs candidats YouTube Music pour un morceau, du plus probable au moins probable. */
 async function candidates(track: SourceTrack, songsOnly: boolean): Promise<YtmTrack[]> {
   const query = `${track.title.replace(/\s[-–]\s.*$/, '')} ${track.artists.slice(0, 2).join(' ')}`.trim();
-  return (await searchSongs(query, { songsOnly }))
+  return (await searchYtMusic(query, songsOnly ? 'songs' : 'all'))
     .map((c, i) => ({ c, ...score(track, c, i) }))
     .filter((x) => x.acceptable)
     .sort((a, b) => b.s - a.s)

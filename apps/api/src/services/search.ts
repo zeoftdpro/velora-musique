@@ -5,7 +5,7 @@ import { db } from '../db/client.js';
 import { albums, artists, genres, tracks } from '../db/schema.js';
 import { selectAlbums, selectTracks, toAlbumDto, toArtistDto, toTrackDto, visibleTo } from './catalog.js';
 import { searchJamendo } from './jamendo.js';
-import { searchYoutube, youtubeEnabled, YoutubeQuotaError } from './youtube.js';
+import { searchYoutube, YoutubeQuotaError } from './youtube.js';
 
 /**
  * Recherche plein texte. Meilisearch indexe titres, albums et artistes pour une autocomplétion
@@ -109,11 +109,10 @@ export async function search(q: string, opts: SearchOptions) {
 }
 
 /**
- * Recherche « partout » sur YouTube, séparée de la recherche principale : chaque appel consomme du quota,
- * le client ne la déclenche donc qu'une fois la saisie stabilisée.
+ * Recherche « partout » sur YouTube (via YouTube Music), séparée de la recherche principale : plus lente,
+ * le client ne la déclenche qu'une fois la saisie stabilisée.
  */
 export async function searchWeb(q: string, limit: number) {
-  if (!youtubeEnabled) return { status: 'disabled' as const, tracks: [] };
   try {
     const ids = await searchYoutube(q, limit);
     const rows = ids.length ? await selectTracks(inArray(tracks.id, ids)) : [];

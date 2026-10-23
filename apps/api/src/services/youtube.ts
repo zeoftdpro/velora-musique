@@ -4,6 +4,7 @@ import { db } from '../db/client.js';
 import { albums, artists, tracks } from '../db/schema.js';
 import { cachedSearch, isCached } from '../lib/search-cache.js';
 import { slugify } from '../lib/slug.js';
+import { searchYtMusic, type YtmTrack } from './ytmusic.js';
 
 /**
  * Catalogue YouTube : recherche via la YouTube Data API v3, lecture via le lecteur YouTube officiel intégré
@@ -119,7 +120,7 @@ function parseMeta(video: Video): Pick<Parsed, 'title' | 'artist' | 'album' | 'y
 }
 
 // Versions rarement voulues, sauf si la recherche les demande explicitement.
-const VARIANT_WORDS = ['live', 'cover', 'karaoke', 'remix', 'reaction', 'instrumental', 'slowed', 'sped up', 'nightcore', '8d', 'lyrics', 'paroles', 'tutorial'];
+const VARIANT_WORDS = ['live', 'cover', 'karaoke', 'remix', 'reaction', 'instrumental', 'instru', 'type beat', 'typebeat', 'flip', 'slowed', 'sped up', 'speed up', 'nightcore', '8d', 'lyrics', 'paroles', 'traduction', 'translation', 'tutorial'];
 
 /** Classement : pistes officielles (Topic, VEVO, « official audio ») en tête, versions alternatives en queue. */
 function score(video: Video, rank: number, query: string) {
@@ -242,14 +243,113 @@ export async function upsertVideos(items: Parsed[]): Promise<string[]> {
   return items.map((p) => trackId.get(`youtube:${p.videoId}`)).filter((id): id is string => Boolean(id));
 }
 
+const SEARCH_PROVIDER = 'ytmusic';
+
 /** Recherche YouTube (mise en cache 24 h) ; renvoie les ids locaux des titres trouvés. */
 export async function searchYoutube(query: string, limit: number): Promise<string[]> {
-  if (!youtubeEnabled) return [];
-  return cachedSearch('youtube', `${query}|${limit}`, CACHE_TTL_MS, async () => upsertVideos(await fetchVideos(query, limit)));
+  return cachedSearch(SEARCH_PROVIDER, `${query}|${limit}`, CACHE_TTL_MS, async () => {
+    let found: Parsed[];
+    try {
+      found = await searchViaYtMusic(query, limit);
+    } catch (error) {
+      // YouTube Music indisponible (API non officielle) : repli sur la Data API, limitée par son quota.
+      if (!youtubeEnabled) throw error;
+      console.warn('Recherche YouTube Music impossible, repli sur la Data API :', (error as Error).message);
+      found = await fetchVideos(query, limit);
+    }
+    return upsertEach(found);
+  });
 }
 
-/** Vrai si `searchYoutube(query, limit)` serait servie par le cache, sans consommer de quota. */
-export const isYoutubeSearchCached = (query: string, limit: number) => isCached('youtube', `${query}|${limit}`, CACHE_TTL_MS);
+/** Comme upsertVideos, mais un titre refusé par la base n'empêche pas d'enregistrer les autres. */
+async function upsertEach(items: Parsed[]) {
+  try {
+    return await upsertVideos(items);
+  } catch {
+    const ids: string[] = [];
+    for (const item of items) ids.push(...(await upsertVideos([item]).catch(() => [])));
+    return ids;
+  }
+}
+
+/** Vrai si `searchYoutube(query, limit)` serait servie par le cache. */
+export const isYoutubeSearchCached = (query: string, limit: number) => isCached(SEARCH_PROVIDER, `${query}|${limit}`, CACHE_TTL_MS);
+
+/**
+ * Recherche sur YouTube Music, sans quota : les titres officiels d'abord (albums, singles), puis les vidéos
+ * (clips, lives, sons publiés par des chaînes), pour trouver aussi ce qui n'existe qu'en vidéo.
+ */
+async function searchViaYtMusic(query: string, limit: number): Promise<Parsed[]> {
+  const [songs, videos] = await Promise.all([searchYtMusic(query, 'songs'), searchYtMusic(query, 'videos').catch(() => [])]);
+  const playable = (t: YtmTrack) => t.durationMs >= MIN_DURATION_S * 1000 && t.durationMs <= MAX_DURATION_S * 1000;
+  const candidates = [
+    ...songs.filter(playable).map((t, rank) => ({ p: fromYtMusic(t), rank, penalty: 0 })),
+    // Vidéos : derrière les pistes officielles à pertinence égale, et plus encore celles publiées par une chaîne
+    // quelconque (reprises, « type beats »…) plutôt que par l'artiste.
+    ...videos.filter(playable).map((t, rank) => ({ p: fromYtMusic(t), rank, penalty: t.artistLinked ? 4 : 6 })),
+  ];
+  // Pertinence : un titre absent des pistes officielles mais présent en clip (« Au DD ») doit remonter en tête.
+  const ranked = candidates
+    .map((c) => ({ ...c, relevance: relevance(query, c.p) - c.penalty - c.rank * 0.05 }))
+    .sort((a, b) => b.relevance - a.relevance)
+    .map((c) => c.p);
+  const parsed = uniqueBy(ranked, (p) => `${slugify(p.artist)}|${slugify(p.title)}`).slice(0, limit + Math.ceil(limit / 2));
+  // Vidéos dont le propriétaire interdit la lecture hors de YouTube : inutile de les proposer.
+  const allowed = await embeddableIds(parsed.map((p) => p.videoId));
+  return allowed ? parsed.filter((p) => allowed.has(p.videoId)) : parsed;
+}
+
+const words = (s: string) => slugify(s).split('-').filter(Boolean);
+
+// Mentions des vidéos amateurs (instrus « type beat », parodies, traductions…), en plus des versions alternatives.
+const AMATEUR_WORDS = ['free', 'beat', 'prod', 'parodie', 'parody', 'traducida', 'subtitulada', 'mashup', 'ai'];
+
+/**
+ * Pertinence d'un résultat : part des mots recherchés présents dans « artiste + titre », titre exact, artiste
+ * demandé, et pénalité pour les versions non demandées (remix, paroles, instru…).
+ */
+function relevance(query: string, p: Parsed) {
+  const asked = words(query);
+  const found = new Set(words(`${p.artist} ${p.title}`));
+  const coverage = asked.filter((w) => found.has(w)).length / (asked.length || 1);
+  const titleWords = words(p.title);
+  const exactTitle = titleWords.length > 0 && titleWords.every((w) => asked.includes(w));
+  const artistWords = words(p.artist);
+  const artistAsked = artistWords.length > 0 && artistWords.every((w) => asked.includes(w));
+  const q = query.toLowerCase();
+  // L'artiste compte aussi : une chaîne amateur se retrouve en artiste (« (FREE) PLK — Demain »).
+  const text = `${p.artist} ${p.title}`.toLowerCase();
+  const variant = [...VARIANT_WORDS, ...AMATEUR_WORDS].some((w) => new RegExp(`\\b${w}\\b`).test(text) && !q.includes(w));
+  return coverage * 10 + (exactTitle ? 3 : 0) + (artistAsked ? 2 : 0) - (variant ? 8 : 0);
+}
+
+/** Résultat YouTube Music → titre du catalogue. Un clip s'intitule souvent « Artiste - Titre (Official Video) ». */
+function fromYtMusic(t: YtmTrack): Parsed {
+  let [artist = 'Artiste inconnu', ...featured] = t.artists;
+  let title = cleanTitle(decodeEntities(t.title));
+  const dashed = title.match(/^(.+?)\s+[-–—]\s+(.+)$/);
+  if (dashed) {
+    const named = dashed[1]!.split(/\s+(?:ft\.?|feat\.?|featuring|x|&)\s+/i)[0]!.trim();
+    const sameArtist = slugify(named).includes(slugify(artist)) || slugify(artist).includes(slugify(named));
+    // Vidéo publiée par une chaîne quelconque : l'artiste est celui du titre, pas la chaîne.
+    if (sameArtist || !t.artistLinked) {
+      if (!t.artistLinked) artist = named;
+      title = dashed[2]!.trim();
+    }
+  }
+  if (featured.length && !/\b(feat|ft|with|avec)\b/i.test(title)) title = `${title} (feat. ${featured.join(', ')})`;
+  return {
+    videoId: t.videoId,
+    title,
+    artist,
+    album: t.album,
+    year: null,
+    // Miniature 4:3 des clips (bandes noires) : la version 16:9, recadrée proprement en carré par l'interface.
+    cover: t.cover?.replace(/^https:\/\/i\.ytimg\.com\/vi\/([\w-]{11})\/.*$/, 'https://i.ytimg.com/vi/$1/mqdefault.jpg') ?? null,
+    durationMs: t.durationMs,
+    score: 0,
+  };
+}
 
 export const videoIdOf = (externalId: string | null) => externalId?.match(/^youtube:([\w-]{11})$/)?.[1] ?? null;
 

@@ -47,8 +47,8 @@ export function SearchPage() {
     () => (debouncedQ || genre ? api.search(debouncedQ, genre) : Promise.resolve(null)),
     [debouncedQ, genre],
   );
-  // Recherche YouTube : plus lente et soumise à un quota, elle n'est lancée qu'une fois la saisie stabilisée.
-  const webQ = useDebounced(q.trim(), 700);
+  // Recherche YouTube : plus lente, elle n'est lancée qu'une fois la saisie stabilisée.
+  const webQ = useDebounced(q.trim(), 450);
   const web = useAsync(() => (webQ.length >= 3 ? api.searchWeb(webQ) : Promise.resolve(null)), [webQ]);
   const webSettled = webQ.length >= 3 && webQ === q.trim();
   const webTracks = useMemo(() => (webSettled ? web.data?.tracks ?? [] : []), [webSettled, web.data]);

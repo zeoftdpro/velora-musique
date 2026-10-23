@@ -9,10 +9,20 @@ import { env } from '../config.js';
 const ORIGIN = 'https://music.youtube.com';
 const CLIENT = { clientName: 'WEB_REMIX', clientVersion: '1.20241023.01.00', hl: 'fr', gl: env.YOUTUBE_REGION_CODE };
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36';
-// Filtre « Titres » de la recherche : pistes officielles (albums, singles), sans clips ni reprises amateurs.
-const SONGS_FILTER = 'EgWKAQIIAWoQEAMQBBAJEAoQBRAREBAQFQ%3D%3D';
+// Filtres de la recherche : « Titres » (pistes officielles des albums et singles) et « Vidéos » (clips, lives, chaînes).
+const FILTERS = { songs: 'EgWKAQIIAWoQEAMQBBAJEAoQBRAREBAQFQ%3D%3D', videos: 'EgWKAQIQAWoKEAkQChAFEAMQBA%3D%3D' } as const;
+export type SearchFilter = keyof typeof FILTERS | 'all';
 
-export type YtmTrack = { videoId: string; title: string; artists: string[]; album: string | null; durationMs: number; cover: string | null };
+export type YtmTrack = {
+  videoId: string;
+  title: string;
+  artists: string[];
+  album: string | null;
+  durationMs: number;
+  cover: string | null;
+  /** Artistes reliés à leur page YouTube Music ; sinon, c'est le nom de la chaîne qui a publié la vidéo. */
+  artistLinked?: boolean;
+};
 
 async function call(endpoint: 'search' | 'browse', body: Record<string, unknown>) {
   const res = await fetch(`${ORIGIN}/youtubei/v1/${endpoint}?prettyPrint=false`, {
@@ -67,6 +77,7 @@ function parseItem(item: ListItem): YtmTrack | null {
     videoId,
     title,
     artists: artists.length ? artists : fallbackArtist ? [fallbackArtist] : [],
+    artistLinked: artists.length > 0,
     album,
     durationMs: duration ? toMs(duration) : 0,
     cover: bigCover(item),
@@ -101,9 +112,9 @@ function findContinuation(node: unknown): string | null {
   return text.match(/"continuationCommand":\{"token":"([^"]+)"/)?.[1] ?? text.match(/"nextContinuationData":\{"continuation":"([^"]+)"/)?.[1] ?? null;
 }
 
-/** Recherche des titres (pistes officielles d'abord). */
-export async function searchSongs(query: string, { songsOnly = true } = {}): Promise<YtmTrack[]> {
-  const data = await call('search', { query, ...(songsOnly ? { params: SONGS_FILTER } : {}) });
+/** Recherche YouTube Music : titres officiels (par défaut), vidéos, ou tout. */
+export async function searchYtMusic(query: string, filter: SearchFilter = 'songs'): Promise<YtmTrack[]> {
+  const data = await call('search', { query, ...(filter !== 'all' ? { params: FILTERS[filter] } : {}) });
   return collectItems(data).map(parseItem).filter((t): t is YtmTrack => t !== null);
 }
 

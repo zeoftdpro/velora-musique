@@ -4,7 +4,7 @@ import { artists, favorites, playHistory, tracks } from '../db/schema.js';
 import { slugify } from '../lib/slug.js';
 import { selectTracks, toTrackDto, visibleTo, type TrackDto } from './catalog.js';
 import { relatedArtists } from './deezer.js';
-import { isYoutubeSearchCached, searchYoutube, youtubeEnabled } from './youtube.js';
+import { isYoutubeSearchCached, searchYoutube } from './youtube.js';
 
 /**
  * Recommandations : profil de goût (écoutes et likes, pondérés par leur ancienneté) croisé avec plusieurs
@@ -17,9 +17,9 @@ import { isYoutubeSearchCached, searchYoutube, youtubeEnabled } from './youtube.
 const DAY = 86_400_000;
 const PLAY_HALF_LIFE_DAYS = 21;
 const LIKE_HALF_LIFE_DAYS = 120;
-// Une recherche YouTube consomme ~1 % du quota quotidien : les recommandations n'en utilisent qu'une petite part.
+// La recherche YouTube Music n'a pas de quota, mais chaque appel allonge la réponse : quelques-uns par requête.
 const YT_SEARCHES_PER_REQUEST = 2;
-const YT_SEARCHES_PER_DAY = 25;
+const YT_SEARCHES_PER_DAY = 300;
 const YT_LIMIT = 15; // même taille que la recherche web : les deux partagent le cache
 const MIN_TRACKS_PER_ARTIST = 4;
 const FOR_YOU_TTL_MS = 15 * 60_000;
@@ -196,7 +196,7 @@ async function relatedTracks(sources: ArtistWeight[]) {
 
   const results = await byArtists(new Map(known.map((a) => [a.id, related.get(a.name.toLowerCase())!.weight])));
 
-  if (youtubeEnabled) {
+  {
     const today = new Date().toISOString().slice(0, 10);
     if (ytBudget.day !== today) ytBudget = { day: today, used: 0 };
     let spent = 0;
