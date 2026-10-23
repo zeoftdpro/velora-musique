@@ -132,8 +132,10 @@ export async function ytMusicLyrics(videoId: string): Promise<{ synced: { time: 
   const browseId = next.match(/"browseId":"(MPLY[^"]+)"/)?.[1];
   if (!browseId) return null;
   const page = await callAndroid('browse', { browseId });
-  const timed = findKey(page, 'timedLyricsData') as { lyricLine: string; cueRange: { startTimeMilliseconds: string } }[] | undefined;
-  const synced = timed?.length ? timed.map((l) => ({ time: Number(l.cueRange.startTimeMilliseconds), text: l.lyricLine.trim() })) : null;
+  const timed = (findKey(page, 'timedLyricsData') as { lyricLine?: string; cueRange?: { startTimeMilliseconds?: string } }[] | undefined)
+    // Certaines entrées (crédits, lignes vides) n'ont pas d'horodatage.
+    ?.filter((l) => l.cueRange?.startTimeMilliseconds !== undefined);
+  const synced = timed?.length ? timed.map((l) => ({ time: Number(l.cueRange!.startTimeMilliseconds), text: (l.lyricLine ?? '').trim() })) : null;
   const plainRuns = (findKey(page, 'musicDescriptionShelfRenderer') as { description?: { runs?: { text: string }[] } } | undefined)?.description?.runs;
   const plain = plainRuns?.map((r) => r.text).join('').trim() || (synced ? synced.map((l) => l.text).join('\n') : null);
   return synced || plain ? { synced, plain } : null;
