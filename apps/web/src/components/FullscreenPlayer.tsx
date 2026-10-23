@@ -193,7 +193,12 @@ function LyricsBody({ lyrics, loading, failed, onRetry, offset, onShowCaptions, 
     return (
       <div className="fs-lyrics__empty">
         <p>Le service de paroles ne répond pas pour le moment.</p>
-        <button className="btn fs-lyrics__retry" onClick={onRetry}>Réessayer</button>
+        <div className="fs-lyrics__actions">
+          <button className="btn fs-lyrics__retry" onClick={onRetry}>Réessayer</button>
+          {onShowCaptions && !captionsOn && (
+            <button className="btn fs-lyrics__retry" onClick={onShowCaptions}>Afficher les sous-titres de la vidéo</button>
+          )}
+        </div>
       </div>
     );
   }

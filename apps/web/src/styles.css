@@ -868,6 +868,7 @@ input.import-card__name:focus { border-color: var(--text); }
 .fs-lyrics__empty { font-size: 24px; font-weight: 600; color: rgba(255, 255, 255, 0.7); margin: 0; align-self: center; }
 .fs__lyrics:has(.fs-lyrics__empty) { display: grid; mask-image: none; }
 .fs-lyrics__empty p { margin: 0 0 16px; }
+.fs-lyrics__actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .fs-lyrics__hint { font-size: 16px; font-weight: 500; color: rgba(255, 255, 255, 0.6); }
 .fs-lyrics__retry { background: white; color: #0b0d17; font-size: 15px; }
 
