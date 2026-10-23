@@ -41,7 +41,7 @@ function FullscreenView() {
   const { favoriteIds, toggleFavorite } = useLibrary();
   const narrow = useMediaQuery(NARROW);
   const tint = useCoverColor(track.album.coverUrl, track.title);
-  const { data: lyrics, loading: lyricsLoading } = useAsync(() => api.lyrics(track.id), [track.id]);
+  const { data: lyrics, loading: lyricsLoading, error: lyricsError, reload: reloadLyrics } = useAsync(() => api.lyrics(track.id), [track.id]);
   const [media, setMedia] = useState(readMedia);
   const [mobileView, setMobileView] = useState<'player' | 'lyrics'>('player');
   const [lyricsHidden, setLyricsHidden] = useState(false);
@@ -50,8 +50,7 @@ function FullscreenView() {
 
   const isYoutube = track.source === 'youtube';
   const showVideo = isYoutube && media === 'video';
-  const hasLyrics = Boolean(lyrics?.synced || lyrics?.plain);
-  const showLyrics = narrow ? mobileView === 'lyrics' : !lyricsHidden && (lyricsLoading || hasLyrics);
+  const showLyrics = narrow ? mobileView === 'lyrics' : !lyricsHidden;
   const liked = favoriteIds.has(track.id);
 
   const close = () => {
@@ -114,11 +113,9 @@ function FullscreenView() {
               aria-label="Paroles" aria-pressed={mobileView === 'lyrics'}><LyricsIcon size={20} /></button>
           ) : (
             <>
-              {(hasLyrics || lyricsLoading) && (
-                <button className={`fs__btn ${showLyrics ? 'is-on' : ''}`} onClick={() => setLyricsHidden((h) => !h)} aria-label="Paroles" aria-pressed={showLyrics} title="Paroles">
-                  <LyricsIcon size={20} />
-                </button>
-              )}
+              <button className={`fs__btn ${showLyrics ? 'is-on' : ''}`} onClick={() => setLyricsHidden((h) => !h)} aria-label="Paroles" aria-pressed={showLyrics} title="Paroles">
+                <LyricsIcon size={20} />
+              </button>
               <button className="fs__btn" onClick={toggleFullscreen} aria-label={isFullscreen ? 'Quitter le plein écran' : 'Plein écran'} title={isFullscreen ? 'Quitter le plein écran' : 'Plein écran'}>
                 {isFullscreen ? <MinimizeIcon size={20} /> : <MaximizeIcon size={20} />}
               </button>
@@ -155,7 +152,7 @@ function FullscreenView() {
 
         {showLyrics && (
           <section className="fs__lyrics" aria-label="Paroles">
-            <LyricsBody lyrics={lyrics} loading={lyricsLoading} />
+            <LyricsBody lyrics={lyrics} loading={lyricsLoading} failed={Boolean(lyricsError || lyrics?.unavailable)} onRetry={reloadLyrics} />
           </section>
         )}
       </div>
@@ -163,8 +160,16 @@ function FullscreenView() {
   );
 }
 
-function LyricsBody({ lyrics, loading }: { lyrics: Lyrics | null; loading: boolean }) {
-  if (loading && !lyrics) return <p className="fs-lyrics__empty">Recherche des paroles…</p>;
+function LyricsBody({ lyrics, loading, failed, onRetry }: { lyrics: Lyrics | null; loading: boolean; failed: boolean; onRetry: () => void }) {
+  if (loading) return <p className="fs-lyrics__empty">Recherche des paroles…</p>;
+  if (failed) {
+    return (
+      <div className="fs-lyrics__empty">
+        <p>Le service de paroles ne répond pas pour le moment.</p>
+        <button className="btn fs-lyrics__retry" onClick={onRetry}>Réessayer</button>
+      </div>
+    );
+  }
   if (lyrics?.synced) return <SyncedLyrics lines={lyrics.synced} />;
   if (lyrics?.plain) {
     return (

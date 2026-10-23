@@ -861,6 +861,8 @@ input.import-card__name:focus { border-color: var(--text); }
 .fs-lyrics__note { font-size: 13px; font-weight: 500; color: rgba(255, 255, 255, 0.6); margin-bottom: 18px !important; }
 .fs-lyrics__empty { font-size: 24px; font-weight: 600; color: rgba(255, 255, 255, 0.7); margin: 0; align-self: center; }
 .fs__lyrics:has(.fs-lyrics__empty) { display: grid; mask-image: none; }
+.fs-lyrics__empty p { margin: 0 0 16px; }
+.fs-lyrics__retry { background: white; color: #0b0d17; font-size: 15px; }
 
 /* Clip YouTube superposé au-dessus du lecteur plein écran. */
 .yt-dock--panel { z-index: 95; }

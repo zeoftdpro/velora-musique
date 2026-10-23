@@ -106,7 +106,12 @@ export default async function catalogRoutes(app: FastifyInstance) {
     if (!row) throw notFound('Titre');
     const lyrics = await findLyrics({ title: row.title, artist: row.artistName, album: row.albumTitle, durationMs: row.durationMs });
     // Titres publics : mêmes paroles pour tout le monde, le CDN peut les garder.
-    reply.header('cache-control', row.ownerId ? 'private, max-age=3600' : 'public, max-age=3600, s-maxage=86400');
+    // Service indisponible : rien en cache, la prochaine demande réessaiera. Rien de trouvé : cache court.
+    const found = Boolean(lyrics.synced || lyrics.plain);
+    reply.header(
+      'cache-control',
+      lyrics.unavailable ? 'no-store' : row.ownerId ? 'private, max-age=3600' : found ? 'public, max-age=3600, s-maxage=86400' : 'public, max-age=600, s-maxage=3600',
+    );
     return lyrics;
   });
 
