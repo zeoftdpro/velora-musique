@@ -7,7 +7,7 @@ export type ThemeChoice = 'light' | 'dark' | 'system';
 const KEY = 'velora.themeChoice';
 const DARK_QUERY = '(prefers-color-scheme: dark)';
 // Couleur du cadre autour des panneaux : barre d'état du téléphone et barre de titre de l'appli installée.
-const FRAME = { light: '#0e1120', dark: '#000000' } as const;
+const FRAME = { light: '#f3f0fb', dark: '#08070f' } as const;
 
 function readTheme(): ThemeChoice {
   try {

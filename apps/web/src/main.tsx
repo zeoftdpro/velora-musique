@@ -21,7 +21,7 @@ import { SearchPage } from './pages/Search';
 import { TrackPage } from './pages/Track';
 import { setupPwa } from './pwa';
 import { initTheme } from './theme';
-import '@fontsource-variable/geist';
+import '@fontsource-variable/plus-jakarta-sans';
 import '@fontsource-variable/geist-mono';
 import './styles.css';
 

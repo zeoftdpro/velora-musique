@@ -13,7 +13,24 @@ import {
 import { SeekBar } from './PlayerBar';
 
 const MEDIA_KEY = 'velora.fullscreenMedia';
+const BIG_LYRICS_KEY = 'velora.bigLyrics';
 const NARROW = '(max-width: 860px)';
+
+function readFlag(key: string) {
+  try {
+    return localStorage.getItem(key) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function writeFlag(key: string, on: boolean) {
+  try {
+    localStorage.setItem(key, on ? '1' : '0');
+  } catch {
+    /* stockage indisponible : le choix vaut pour cette visite */
+  }
+}
 
 function readMedia(): 'cover' | 'video' {
   try {
@@ -71,7 +88,15 @@ function FullscreenView() {
   // version synchronisée à la voix qui existe.
   const captionsMode = isYoutube && !lyricsLoading && !lyricsError && Boolean(lyrics) && !lyrics!.synced && !lyrics!.plain && !lyrics!.unavailable;
   const showVideo = isYoutube && (media === 'video' || captionsMode);
-  const showLyrics = captionsMode ? false : narrow ? mobileView === 'lyrics' : !lyricsHidden;
+  // « Paroles en grand » : seulement les paroles, centrées, avec une petite barre de lecture (choix mémorisé).
+  const [bigLyrics, setBigLyrics] = useState(() => readFlag(BIG_LYRICS_KEY));
+  const karaoke = bigLyrics && !captionsMode;
+  const toggleBigLyrics = () => {
+    const next = !bigLyrics;
+    setBigLyrics(next);
+    writeFlag(BIG_LYRICS_KEY, next);
+  };
+  const showLyrics = captionsMode ? false : karaoke ? true : narrow ? mobileView === 'lyrics' : !lyricsHidden;
   const liked = favoriteIds.has(track.id);
 
   // Sous-titres activés d'office en mode « sous-titres », puis retirés pour le titre suivant s'il a des paroles,
@@ -140,17 +165,21 @@ function FullscreenView() {
       <header className="fs__top">
         <button className="fs__btn" onClick={close} aria-label="Fermer le lecteur plein écran" title="Fermer (Échap)"><DownIcon size={22} /></button>
         <div className="fs__top-actions">
-          {isYoutube && (
+          {!captionsMode && (
+            <button className={`fs__btn fs__btn--text ${karaoke ? 'is-on' : ''}`} onClick={toggleBigLyrics} aria-pressed={karaoke}
+              aria-label="Paroles en grand" title="Paroles en grand">Aa</button>
+          )}
+          {isYoutube && !karaoke && (
             <div className="segmented segmented--glass" role="radiogroup" aria-label="Afficher">
               <button role="radio" aria-checked={media === 'cover'} onClick={() => chooseMedia('cover')}>Pochette</button>
               <button role="radio" aria-checked={media === 'video'} onClick={() => chooseMedia('video')}>Clip</button>
             </div>
           )}
-          {showVideo && (
+          {showVideo && !karaoke && (
             <button className={`fs__btn fs__btn--text ${videoCaptions ? 'is-on' : ''}`} onClick={() => setVideoCaptions(!videoCaptions)}
               aria-pressed={videoCaptions} aria-label="Sous-titres de la vidéo" title="Sous-titres de la vidéo">CC</button>
           )}
-          {narrow ? (
+          {karaoke ? null : narrow ? (
             <button className={`fs__btn ${mobileView === 'lyrics' ? 'is-on' : ''}`} onClick={() => setMobileView((v) => (v === 'lyrics' ? 'player' : 'lyrics'))}
               aria-label="Paroles" aria-pressed={mobileView === 'lyrics'}><LyricsIcon size={20} /></button>
           ) : (
@@ -166,7 +195,7 @@ function FullscreenView() {
         </div>
       </header>
 
-      <div className={`fs__body ${showLyrics ? '' : 'fs__body--solo'} ${captionsMode ? 'fs__body--captions' : ''} ${narrow && showLyrics ? 'fs__body--lyrics' : ''}`}>
+      <div className={`fs__body ${showLyrics ? '' : 'fs__body--solo'} ${captionsMode ? 'fs__body--captions' : ''} ${karaoke ? 'fs__body--karaoke' : narrow && showLyrics ? 'fs__body--lyrics' : ''}`}>
         <section className={`fs__player ${narrow && showLyrics ? 'fs__player--compact' : ''}`}>
           <div className={`fs__media ${showVideo ? 'fs__media--video' : ''}`}>
             {/* Emplacement du clip : le lecteur YouTube vient s'y superposer ; masqué, il rend la place à la pochette. */}
@@ -213,6 +242,24 @@ function FullscreenView() {
               onShowCaptions={isYoutube ? () => { chooseMedia('video'); setVideoCaptions(true); if (narrow) setMobileView('player'); } : undefined}
               captionsOn={showVideo && videoCaptions} />
           </section>
+        )}
+
+        {karaoke && (
+          <div className="fs-mini">
+            <Cover src={track.album.coverUrl} alt={track.album.title} size={40} />
+            <div className="fs-mini__titles">
+              <strong>{track.title}</strong>
+              <span>{track.artist.name}</span>
+            </div>
+            <SeekBar />
+            {controls}
+            {lyrics?.estimated && (
+              <div className="fs__offset fs__offset--mini">
+                <button onClick={() => setOffset((o) => o - 1000)} aria-label="Paroles plus tôt" title="Paroles plus tôt">− 1 s</button>
+                <button onClick={() => setOffset((o) => o + 1000)} aria-label="Paroles plus tard" title="Paroles plus tard">+ 1 s</button>
+              </div>
+            )}
+          </div>
         )}
       </div>
     </div>

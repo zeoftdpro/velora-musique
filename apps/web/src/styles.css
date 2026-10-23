@@ -1,59 +1,73 @@
 /*
- * Velora — panneaux blancs arrondis posés sur un cadre sombre, typographie Geist, boutons noirs.
- * Thème clair par défaut ; thème sombre via <html data-theme="dark"> (voir theme.ts).
+ * Velora — « Aurore » : panneaux de verre posés sur un ciel violet animé, dégradé violet → rose en signature,
+ * typographie Plus Jakarta Sans. Thème sombre par défaut ; clair via <html data-theme="light"> (voir theme.ts).
  */
 :root {
-  --frame: #0e1120;
+  --frame: #f3f0fb;
   --bg: #ffffff;
-  --bg-elev: #f6f7f9;
-  --bg-elev-2: #eef0f3;
-  --bg-hover: #f2f3f6;
-  --border: #e5e7eb;
-  --text: #0b0d17;
-  --text-muted: #6b7080;
-  --primary: #0b0d17;
+  --panel: rgba(255, 255, 255, 0.78);
+  --bg-elev: #f7f5fc;
+  --bg-elev-2: #efebf9;
+  --bg-hover: rgba(124, 58, 237, 0.06);
+  --border: rgba(38, 20, 84, 0.1);
+  --text: #18122b;
+  --text-muted: #6f6886;
+  --primary: #18122b;
   --on-primary: #ffffff;
-  --accent: #0a84ff;
-  --accent-strong: #006fe0;
-  --accent-soft: rgba(10, 132, 255, 0.12);
+  --accent: #7c3aed;
+  --accent-2: #db2777;
+  --accent-strong: #6d28d9;
+  --accent-soft: rgba(124, 58, 237, 0.12);
+  --grad: linear-gradient(135deg, #7c3aed 0%, #c026d3 55%, #db2777 100%);
+  --glow: 0 10px 30px rgba(124, 58, 237, 0.35);
+  --aurora-1: rgba(124, 58, 237, 0.22);
+  --aurora-2: rgba(219, 39, 119, 0.16);
+  --aurora-3: rgba(59, 130, 246, 0.16);
   --danger: #e5484d;
-  --like: #ff2d55;
-  --range: #dfe1e6;
-  --range-buffer: #c9ccd4;
-  --shadow: 0 1px 2px rgba(16, 19, 40, 0.06), 0 8px 24px rgba(16, 19, 40, 0.08);
-  --shadow-lg: 0 24px 60px rgba(16, 19, 40, 0.22);
-  --backdrop: rgba(14, 17, 32, 0.45);
-  --radius: 12px;
-  --panel-radius: 16px;
-  --gap: 8px;
-  --player-h: 76px;
-  --sidebar-w: 240px;
+  --like: #db2777;
+  --range: rgba(38, 20, 84, 0.12);
+  --range-buffer: rgba(38, 20, 84, 0.22);
+  --shadow: 0 1px 2px rgba(38, 20, 84, 0.06), 0 10px 30px rgba(38, 20, 84, 0.08);
+  --shadow-lg: 0 24px 60px rgba(38, 20, 84, 0.22);
+  --backdrop: rgba(24, 18, 43, 0.45);
+  --radius: 14px;
+  --panel-radius: 22px;
+  --gap: 10px;
+  --player-h: 80px;
+  --sidebar-w: 236px;
   --panel-w: 340px;
-  --font: 'Geist Variable', 'Geist', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font: 'Plus Jakarta Sans Variable', 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --mono: 'Geist Mono Variable', 'Geist Mono', ui-monospace, 'Cascadia Code', Consolas, monospace;
   color-scheme: light;
 }
 :root[data-theme='dark'] {
-  --frame: #000000;
-  --bg: #111216;
-  --bg-elev: #18191e;
-  --bg-elev-2: #212229;
-  --bg-hover: #1d1e24;
-  --border: #2a2b33;
-  --text: #f4f4f6;
-  --text-muted: #9a9cab;
-  --primary: #f4f4f6;
-  --on-primary: #0b0d17;
-  --accent: #3d9dff;
-  --accent-strong: #63b0ff;
-  --accent-soft: rgba(61, 157, 255, 0.16);
+  --frame: #08070f;
+  --bg: #15121f;
+  --panel: rgba(22, 19, 34, 0.72);
+  --bg-elev: #1b1728;
+  --bg-elev-2: #241f35;
+  --bg-hover: rgba(255, 255, 255, 0.055);
+  --border: rgba(255, 255, 255, 0.08);
+  --text: #f4f1ff;
+  --text-muted: #a49dbd;
+  --primary: #f4f1ff;
+  --on-primary: #15121f;
+  --accent: #a78bfa;
+  --accent-2: #f472b6;
+  --accent-strong: #c4b5fd;
+  --accent-soft: rgba(167, 139, 250, 0.16);
+  --grad: linear-gradient(135deg, #8b5cf6 0%, #d946ef 55%, #f472b6 100%);
+  --glow: 0 10px 34px rgba(139, 92, 246, 0.45);
+  --aurora-1: rgba(139, 92, 246, 0.28);
+  --aurora-2: rgba(236, 72, 153, 0.18);
+  --aurora-3: rgba(56, 189, 248, 0.12);
   --danger: #ff6b6b;
-  --like: #ff4d6d;
-  --range: #34353e;
-  --range-buffer: #4a4b56;
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.35);
+  --like: #f472b6;
+  --range: rgba(255, 255, 255, 0.12);
+  --range-buffer: rgba(255, 255, 255, 0.24);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 30px rgba(0, 0, 0, 0.35);
   --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.6);
-  --backdrop: rgba(0, 0, 0, 0.6);
+  --backdrop: rgba(5, 4, 10, 0.65);
   color-scheme: dark;
 }
 
@@ -906,6 +920,177 @@ input.import-card__name:focus { border-color: var(--text); }
   .fs-lyrics li button { font-size: 26px; padding: 8px 0; }
   .fs .seek__time { display: inline; }
   .fs__volume { display: none; }
+}
+
+/* ---------- Identité « Aurore » : ciel animé, verre, dégradé violet → rose ---------- */
+
+body { font-feature-settings: normal; letter-spacing: -0.005em; }
+h1, h2, h3, .page__title, .hero__title, .section__title { font-weight: 800; letter-spacing: -0.035em; }
+
+/* Ciel : trois halos colorés qui dérivent lentement derrière les panneaux de verre. */
+.app { position: relative; isolation: isolate; }
+.app::before {
+  content: ''; position: fixed; inset: -20%; z-index: -1; pointer-events: none;
+  background:
+    radial-gradient(38% 45% at 18% 22%, var(--aurora-1), transparent 70%),
+    radial-gradient(32% 40% at 82% 18%, var(--aurora-2), transparent 70%),
+    radial-gradient(40% 45% at 60% 88%, var(--aurora-3), transparent 70%);
+  filter: blur(20px);
+  animation: aurora 38s ease-in-out infinite alternate;
+}
+@keyframes aurora {
+  0% { transform: translate3d(0, 0, 0) rotate(0deg); }
+  50% { transform: translate3d(4%, -3%, 0) rotate(8deg); }
+  100% { transform: translate3d(-3%, 4%, 0) rotate(-6deg); }
+}
+@media (prefers-reduced-motion: reduce) { .app::before { animation: none; } }
+
+/* Panneaux de verre. */
+.sidebar, .main, .np, .player {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  backdrop-filter: blur(24px) saturate(1.4);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  box-shadow: var(--shadow);
+}
+.main { background: color-mix(in srgb, var(--panel) 92%, transparent); }
+
+/* Logo et navigation : indicateur dégradé sur la page active. */
+.brand span { background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; font-weight: 800; }
+.nav a, .sidebar__item { border-radius: 12px; position: relative; }
+.nav a.active, .sidebar__item.active { background: var(--accent-soft); color: var(--text); }
+.nav a.active::before {
+  content: ''; position: absolute; left: 0; top: 9px; bottom: 9px; width: 3px; border-radius: 3px; background: var(--grad);
+}
+.nav a.active svg { color: var(--accent); }
+.avatar { background: var(--grad); color: white; }
+.liked-tile, .liked-cover, .playlist-tile--liked { background: var(--grad); }
+.playlist-tile--liked:hover { background: var(--grad); filter: brightness(1.08); }
+
+/* Boutons : pilules dégradées et lumineuses. */
+.btn { border-radius: 999px; }
+.btn--primary, .big-play, .card__play, .quick-tile__play, .best__play, .search-cta__icon, .chip--active, .tab.active, .playlist-tile--import {
+  background: var(--grad); color: white; border-color: transparent;
+}
+.btn--primary:hover:not(:disabled) { opacity: 1; filter: brightness(1.1); }
+.big-play { border-radius: 999px; padding: 0 22px 0 18px; height: 44px; box-shadow: var(--glow); }
+.big-play:hover:not(:disabled) { transform: translateY(-1px) scale(1.02); }
+.card__play, .best__play { box-shadow: var(--glow); }
+.playlist-tile--import span { color: rgba(255, 255, 255, 0.85); }
+.hero__actions .icon-btn, .hero__actions .btn--ghost { border-radius: 999px; background: color-mix(in srgb, var(--panel) 80%, transparent); backdrop-filter: blur(10px); }
+.chip { border-radius: 999px; background: color-mix(in srgb, var(--panel) 70%, transparent); }
+.tab { border-radius: 999px; }
+.search-cta__icon { border-radius: 16px; }
+
+/* Cartes : pochettes plus rondes, légère élévation au survol. */
+.card { border-radius: 18px; transition: background 0.2s, transform 0.2s; }
+.card:hover { transform: translateY(-3px); }
+.card__art .cover { border-radius: 14px; }
+.quick-tile, .best, .search-cta, .playlist-tile, .import-card, .import-steps li, .np__queue, .panel {
+  background: color-mix(in srgb, var(--panel) 70%, transparent); border-color: var(--border); border-radius: 20px;
+}
+.quick-tile { border-radius: 16px; }
+.genre-tile { border-radius: 20px; }
+
+/* En-têtes : titres plus massifs, mention dans la couleur d'accent. */
+.hero__kind, .eyebrow { color: var(--accent); letter-spacing: 0.12em; }
+.hero__art { border-radius: 20px; box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35); }
+.page--tinted {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--tint) 40%, transparent) 0, color-mix(in srgb, var(--tint) 12%, transparent) 320px, transparent 560px);
+}
+
+/* Liste de titres. */
+.track { border-radius: 14px; }
+.track__main .cover { border-radius: 10px !important; }
+.track--current { background: var(--accent-soft); }
+.track--current .track__title { color: var(--accent); }
+.eq i { background: var(--grad); }
+
+/* Lecteur : capsule flottante, bouton lecture dégradé et lumineux, progression dégradée. */
+.player {
+  border-radius: 24px;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--tint, transparent) 22%, transparent), transparent 60%),
+    var(--panel);
+}
+.player__toggle { background: var(--grad); color: white; box-shadow: var(--glow); width: 44px; height: 44px; }
+.player__side { background: transparent; border: 0; }
+.player__now .cover { border-radius: 12px; }
+.range { background: linear-gradient(to right, var(--accent) var(--fill, 0%), var(--range-buffer) var(--fill, 0%), var(--range-buffer) var(--buffer, 0%), var(--range) var(--buffer, 0%)); }
+.range:hover { background: linear-gradient(to right, var(--accent-2) var(--fill, 0%), var(--range-buffer) var(--fill, 0%), var(--range-buffer) var(--buffer, 0%), var(--range) var(--buffer, 0%)); }
+.range::-webkit-slider-thumb { background: white; box-shadow: 0 0 0 3px var(--accent-soft); }
+.switch--on .switch__track { background: var(--grad); }
+.icon-btn { border-radius: 12px; }
+.icon-btn.is-on { color: var(--accent); }
+.icon-btn.is-on::after { background: var(--grad); }
+.badge { background: var(--accent-soft); color: var(--accent); }
+
+/* Champs : halo d'accent au focus. */
+.searchbar, .import__form { border-radius: 999px; background: color-mix(in srgb, var(--panel) 75%, transparent); }
+.searchbar:focus-within, .import__form:focus-within { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
+.import__form .btn { border-radius: 999px; }
+.form input:focus, .form textarea:focus, .dialog__field input:focus { border-color: var(--accent); }
+
+/* Menus, dialogues, notification. */
+.menu__panel, .dialog, .upload-panel { border-radius: 18px; background: var(--bg); }
+.toast { background: var(--grad); color: white; border-radius: 999px; box-shadow: var(--glow); }
+.segmented button[aria-checked='true'] { background: var(--grad); color: white; }
+
+/* Import : barre de progression dégradée. */
+.import-progress__bar span, .upload-item__bar span { background: var(--grad); }
+
+/* Connexion : la même aurore. */
+.auth {
+  background:
+    radial-gradient(45% 40% at 20% 15%, var(--aurora-1), transparent 70%),
+    radial-gradient(40% 40% at 85% 20%, var(--aurora-2), transparent 70%),
+    radial-gradient(45% 45% at 60% 90%, var(--aurora-3), transparent 70%),
+    var(--frame);
+}
+.auth__card { border-radius: 26px; border: 1px solid var(--border); background: var(--panel); backdrop-filter: blur(24px); }
+
+/* Plein écran : accents de la nouvelle identité. */
+.fs-controls__play { background: var(--grad); color: white; box-shadow: var(--glow); }
+.fs__btn { border-radius: 999px; }
+.fs__btn.is-on { background: var(--grad); color: white; }
+.segmented--glass button[aria-checked='true'] { background: var(--grad); color: white; }
+.fs-lyrics li.is-active [data-w] {
+  background: linear-gradient(90deg, #fff calc(var(--p, 0) * 100%), rgba(255, 255, 255, 0.38) calc(var(--p, 0) * 100%));
+  -webkit-background-clip: text; background-clip: text;
+}
+.fs .range, .fs .range:hover {
+  background: linear-gradient(to right, #fff var(--fill, 0%), rgba(255, 255, 255, 0.35) var(--fill, 0%), rgba(255, 255, 255, 0.35) var(--buffer, 0%), rgba(255, 255, 255, 0.18) var(--buffer, 0%));
+}
+
+/* Mode « Paroles en grand » : seulement les paroles, centrées, et une barre de lecture discrète. */
+.fs__body--karaoke { display: flex; flex-direction: column; align-items: stretch; gap: 0; max-width: 1200px; }
+.fs__body--karaoke .fs__player { display: none; }
+.fs-mini .fs-controls .icon-btn:first-child, .fs-mini .fs-controls .icon-btn:last-child { display: none; }
+.fs__offset--mini { flex: none; }
+.fs__body--karaoke .fs__lyrics { flex: 1; width: 100%; mask-image: linear-gradient(180deg, transparent, #000 18%, #000 78%, transparent); }
+.fs__body--karaoke .fs-lyrics { padding: 38vh 0 50vh; text-align: center; }
+.fs__body--karaoke .fs-lyrics li button {
+  text-align: center; font-size: clamp(32px, 5.2vw, 76px); line-height: 1.12; padding: 14px 0; transform-origin: center;
+}
+.fs__body--karaoke .fs-lyrics li.is-active button { transform: scale(1.04); }
+.fs__body--karaoke .fs-lyrics--plain { text-align: center; font-size: clamp(24px, 3vw, 38px); }
+.fs__body--karaoke .fs-lyrics__empty { text-align: center; justify-self: center; }
+.fs-mini {
+  display: flex; align-items: center; gap: 14px; width: min(760px, 100%); margin: 0 auto; padding: 10px 14px;
+  border-radius: 999px; background: rgba(255, 255, 255, 0.08); backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.fs-mini .cover { border-radius: 50%; flex-shrink: 0; }
+.fs-mini__titles { display: flex; flex-direction: column; min-width: 0; width: 150px; }
+.fs-mini__titles strong { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fs-mini__titles span { font-size: 12px; color: rgba(255, 255, 255, 0.65); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fs-mini .seek { flex: 1; }
+.fs-mini .fs-controls { gap: 6px; }
+.fs-mini .fs-controls__play { width: 42px; height: 42px; }
+@media (max-width: 860px) {
+  .fs-mini { border-radius: 22px; flex-wrap: wrap; justify-content: center; }
+  .fs-mini__titles { width: auto; flex: 1; }
+  .fs-mini .seek { order: 3; flex-basis: 100%; }
+  .fs__body--karaoke .fs-lyrics li button { font-size: 30px; }
 }
 
 /* ---------- Mobile ---------- */
