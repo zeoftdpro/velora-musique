@@ -35,7 +35,7 @@ export function FullscreenPlayer() {
 function FullscreenView() {
   const {
     current, playing, loading, toggle, next, prev, shuffle, toggleShuffle, repeat, cycleRepeat, volume, muted, setVolume, toggleMute,
-    setNowPlayingOpen,
+    setNowPlayingOpen, videoCaptions, setVideoCaptions,
   } = usePlayer();
   const track = current!;
   const { favoriteIds, toggleFavorite } = useLibrary();
@@ -111,6 +111,10 @@ function FullscreenView() {
               <button role="radio" aria-checked={media === 'video'} onClick={() => chooseMedia('video')}>Clip</button>
             </div>
           )}
+          {showVideo && (
+            <button className={`fs__btn fs__btn--text ${videoCaptions ? 'is-on' : ''}`} onClick={() => setVideoCaptions(!videoCaptions)}
+              aria-pressed={videoCaptions} aria-label="Sous-titres de la vidéo" title="Sous-titres de la vidéo">CC</button>
+          )}
           {narrow ? (
             <button className={`fs__btn ${mobileView === 'lyrics' ? 'is-on' : ''}`} onClick={() => setMobileView((v) => (v === 'lyrics' ? 'player' : 'lyrics'))}
               aria-label="Paroles" aria-pressed={mobileView === 'lyrics'}><LyricsIcon size={20} /></button>
@@ -164,7 +168,9 @@ function FullscreenView() {
 
         {showLyrics && (
           <section className="fs__lyrics" aria-label="Paroles">
-            <LyricsBody lyrics={lyrics} loading={lyricsLoading} failed={Boolean(lyricsError || lyrics?.unavailable)} onRetry={reloadLyrics} offset={offset} />
+            <LyricsBody lyrics={lyrics} loading={lyricsLoading} failed={Boolean(lyricsError || lyrics?.unavailable)} onRetry={reloadLyrics} offset={offset}
+              onShowCaptions={isYoutube ? () => { chooseMedia('video'); setVideoCaptions(true); if (narrow) setMobileView('player'); } : undefined}
+              captionsOn={showVideo && videoCaptions} />
           </section>
         )}
       </div>
@@ -172,7 +178,10 @@ function FullscreenView() {
   );
 }
 
-function LyricsBody({ lyrics, loading, failed, onRetry, offset }: {
+function LyricsBody({ lyrics, loading, failed, onRetry, offset, onShowCaptions, captionsOn }: {
+  /** Titre YouTube : afficher ses sous-titres sur le clip quand aucune parole n'existe. */
+  onShowCaptions?: () => void;
+  captionsOn: boolean;
   lyrics: Lyrics | null;
   loading: boolean;
   failed: boolean;
@@ -194,6 +203,18 @@ function LyricsBody({ lyrics, loading, failed, onRetry, offset }: {
       <div className="fs-lyrics fs-lyrics--plain">
         <p className="fs-lyrics__note">Paroles non synchronisées</p>
         {lyrics.plain.split('\n').map((l, i) => <p key={i}>{l || ' '}</p>)}
+      </div>
+    );
+  }
+  if (onShowCaptions) {
+    return (
+      <div className="fs-lyrics__empty">
+        <p>Aucune base de paroles ne connaît ce titre.</p>
+        {captionsOn ? (
+          <p className="fs-lyrics__hint">Les sous-titres de la vidéo s’affichent sur le clip, quand YouTube en propose.</p>
+        ) : (
+          <button className="btn fs-lyrics__retry" onClick={onShowCaptions}>Afficher les sous-titres de la vidéo</button>
+        )}
       </div>
     );
   }

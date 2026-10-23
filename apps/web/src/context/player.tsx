@@ -44,6 +44,9 @@ type PlayerState = {
   /** Lecteur plein écran (pochette ou clip, commandes et paroles). */
   nowPlayingOpen: boolean;
   setNowPlayingOpen: (open: boolean) => void;
+  /** Sous-titres de la vidéo YouTube (affichés par le lecteur sur le clip) : repli quand aucune parole n'existe. */
+  videoCaptions: boolean;
+  setVideoCaptions: (on: boolean) => void;
   playQueue: (tracks: Track[], startIndex?: number, source?: QueueSource) => void;
   playNext: (track: Track) => void;
   addToQueue: (track: Track) => void;
@@ -192,6 +195,32 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     };
   }, []);
   const [nowPlayingOpen, setNowPlayingOpen] = useState(false);
+  const [videoCaptions, setVideoCaptionsState] = useState(false);
+  const captionsRef = useRef(false);
+  // Active (ou retire) les sous-titres du lecteur YouTube, en français de préférence. La liste des pistes n'est
+  // connue qu'une fois le module chargé : un second essai suit si elle est encore vide.
+  const applyCaptions = useRef((retry: boolean) => {
+    const yt = ytRef.current;
+    if (!yt) return;
+    try {
+      if (!captionsRef.current) return yt.unloadModule('captions');
+      yt.loadModule('captions');
+      const list = yt.getOption('captions', 'tracklist') ?? [];
+      const track = list.find((t) => t.languageCode.startsWith('fr')) ?? list[0];
+      if (track) {
+        yt.setOption('captions', 'track', { languageCode: track.languageCode });
+        yt.setOption('captions', 'fontSize', 2); // plus lisibles : ils tiennent lieu de paroles
+      }
+      if (!track && retry) setTimeout(() => applyCaptions(false), 1200);
+    } catch {
+      /* module indisponible pour cette vidéo */
+    }
+  }).current;
+  const setVideoCaptions = useCallback((on: boolean) => {
+    captionsRef.current = on;
+    setVideoCaptionsState(on);
+    applyCaptions(true);
+  }, [applyCaptions]);
   const [slotRect, setSlotRect] = useState<SlotRect | null>(null);
   // Ordre d'origine de la file, conservé pendant la lecture aléatoire.
   const originalQueue = useRef<Track[] | null>(null);
@@ -267,6 +296,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
                   if (engineRef.current !== 'youtube') return;
                   if (data === YT_STATE.PLAYING) {
                     backgroundSkips.current = 0;
+                    // Nouvelle vidéo : les sous-titres demandés sont réappliqués.
+                    if (captionsRef.current) applyCaptions(true);
                     setPlaying(true);
                     setLoading(false);
                   } else if (data === YT_STATE.PAUSED || data === YT_STATE.CUED) {
@@ -780,12 +811,12 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const value = useMemo<PlayerState>(
     () => ({
       queue, index, current, playing, loading, volume, muted, quality, videoHidden,
-      shuffle, repeat, autoplay, playlistChain, queueSource, panelOpen, videoInPanel: slotRect !== null, addVideoSlot, nowPlayingOpen, setNowPlayingOpen,
+      shuffle, repeat, autoplay, playlistChain, queueSource, panelOpen, videoInPanel: slotRect !== null, addVideoSlot, nowPlayingOpen, setNowPlayingOpen, videoCaptions, setVideoCaptions,
       playQueue, playNext, addToQueue, jumpTo, toggle, next, prev, seek, setVolume, toggleMute, toggleVideo,
       toggleShuffle, cycleRepeat, toggleAutoplay, togglePlaylistChain, togglePanel,
     }),
     [queue, index, current, playing, loading, volume, muted, quality, videoHidden, shuffle, repeat, autoplay, playlistChain, queueSource,
-      panelOpen, slotRect, addVideoSlot, nowPlayingOpen, playQueue, playNext, addToQueue, jumpTo, toggle, next, prev, seek, setVolume, toggleMute, toggleVideo,
+      panelOpen, slotRect, addVideoSlot, nowPlayingOpen, videoCaptions, setVideoCaptions, playQueue, playNext, addToQueue, jumpTo, toggle, next, prev, seek, setVolume, toggleMute, toggleVideo,
       toggleShuffle, cycleRepeat, toggleAutoplay, togglePlaylistChain, togglePanel],
   );
 

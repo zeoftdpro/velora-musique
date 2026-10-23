@@ -51,7 +51,7 @@ class Unavailable extends Error {}
 async function get<T>(path: string, params: Record<string, string>): Promise<T | null> {
   for (let attempt = 0; ; attempt++) {
     try {
-      const res = await fetch(`${API}/${path}?${new URLSearchParams(params)}`, { headers: HEADERS, signal: AbortSignal.timeout(6000) });
+      const res = await fetch(`${API}/${path}?${new URLSearchParams(params)}`, { headers: HEADERS, signal: AbortSignal.timeout(5000) });
       if (res.status === 404) return null;
       if (res.ok) return (await res.json()) as T;
       if (res.status < 500 && res.status !== 429) return null;
@@ -59,7 +59,7 @@ async function get<T>(path: string, params: Record<string, string>): Promise<T |
       /* réseau, délai dépassé : on réessaie */
     }
     if (attempt >= 2) throw new Unavailable('LRCLIB ne répond pas');
-    await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+    await new Promise((r) => setTimeout(r, 300 * (attempt + 1)));
   }
 }
 
@@ -122,6 +122,80 @@ async function neteaseSynced(title: string, artist: string, seconds: number): Pr
   return lines;
 }
 
+// ---------- Genius : texte brut, très fourni en rap francophone (recherche publique du site, sans clé). ----------
+
+const GENIUS_HEADERS = { 'user-agent': NETEASE_HEADERS['user-agent'] };
+
+/** Position de la balise </div> qui ferme un élément dont le contenu commence à `start`. */
+function closingDiv(html: string, start: number) {
+  let depth = 1;
+  const tags = /<\/?div\b[^>]*>/g;
+  tags.lastIndex = start;
+  for (let t = tags.exec(html); t; t = tags.exec(html)) {
+    depth += t[0].startsWith('</') ? -1 : 1;
+    if (depth === 0) return { index: t.index, end: t.index + t[0].length };
+  }
+  return { index: html.length, end: html.length };
+}
+
+/** Contenu de chaque élément ouvert par `opening` (balises <div> imbriquées comprises). */
+function divContents(html: string, opening: RegExp) {
+  return [...html.matchAll(opening)].map((m) => html.slice(m.index! + m[0].length, closingDiv(html, m.index! + m[0].length).index));
+}
+
+/** Retire les éléments ouverts par `opening`, avec tout leur contenu. */
+function stripDivs(html: string, opening: RegExp) {
+  let out = html;
+  for (let m = out.match(opening); m?.index !== undefined; m = out.match(opening)) {
+    out = out.slice(0, m.index) + out.slice(closingDiv(out, m.index + m[0].length).end);
+  }
+  return out;
+}
+
+const decodeHtml = (s: string) =>
+  s.replace(/&#x([0-9a-f]+);/gi, (_, h: string) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, d: string) => String.fromCodePoint(Number(d)))
+    .replace(/&(amp|quot|apos|lt|gt|nbsp);/g, (_, e: string) => ({ amp: '&', quot: '"', apos: "'", lt: '<', gt: '>', nbsp: ' ' })[e]!);
+
+async function geniusPlain(title: string, artist: string): Promise<string | null> {
+  try {
+    const res = await fetch(`https://genius.com/api/search/song?${new URLSearchParams({ q: `${artist} ${title}`, per_page: '5' })}`, {
+      headers: GENIUS_HEADERS,
+      signal: AbortSignal.timeout(6000),
+    });
+    if (!res.ok) return null;
+    const body = (await res.json()) as { response?: { sections?: { hits?: { result: { title: string; url: string; primary_artist?: { name: string } } }[] }[] } };
+    const wantedArtist = normalize(artist);
+    const wantedTitle = normalize(title);
+    const song = body.response?.sections?.[0]?.hits
+      ?.map((h) => h.result)
+      .find((r) => {
+        const a = normalize(r.primary_artist?.name ?? '');
+        const t = normalize(r.title);
+        return (a.includes(wantedArtist) || wantedArtist.includes(a)) && (t.includes(wantedTitle) || wantedTitle.includes(t));
+      });
+    if (!song) return null;
+    const page = await fetch(song.url, { headers: GENIUS_HEADERS, signal: AbortSignal.timeout(8000) });
+    if (!page.ok) return null;
+    const html = await page.text();
+    const text = divContents(html, /<div[^>]*data-lyrics-container="true"[^>]*>/g)
+      // En-tête (contributeurs, traductions) que Genius place dans le premier bloc.
+      .map((block) => stripDivs(block, /<div[^>]*data-exclude-from-selection="true"[^>]*>/))
+      .join('\n')
+      .replace(/<br\s*\/?>/g, '\n')
+      .replace(/<[^>]+>/g, '');
+    const lines = decodeHtml(text)
+      .split('\n')
+      .map((l) => l.trim())
+      // Repères de structure (« [Couplet 1] », « [Refrain] ») : remplacés par une pause entre les parties.
+      .map((l) => (/^\[.*\]$/.test(l) ? '' : l));
+    const plain = lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+    return plain.split('\n').filter(Boolean).length >= 4 ? plain : null;
+  } catch {
+    return null;
+  }
+}
+
 // ---------- Dernier recours : synchronisation estimée du texte brut ----------
 
 /**
@@ -156,6 +230,10 @@ export async function findLyrics(track: { title: string; artist: string; album: 
   const title = cleanTitle(track.title) || track.title;
   const artist = mainArtist(track.artist);
   const seconds = Math.round(track.durationMs / 1000);
+  // Les sources de secours sont interrogées dès maintenant, en parallèle de LRCLIB : un titre absent de toutes
+  // les bases ne fait plus attendre la somme des délais. (Elles ne lèvent jamais d'erreur.)
+  const neteasePromise = neteaseSynced(title, artist, seconds);
+  const geniusPromise = geniusPlain(title, artist);
   let record: LrclibRecord | null = null;
   let lrclibDown = false;
   try {
@@ -182,10 +260,13 @@ export async function findLyrics(track: { title: string; artist: string; album: 
 
   let lyrics = toLyrics(record);
   if (!lyrics.synced && !record?.instrumental) {
-    // 4. Seconde source (NetEase), puis synchronisation estimée du texte brut.
-    const netease = await neteaseSynced(title, artist, seconds);
+    // 4. Seconde source (NetEase) ; 5. texte brut de Genius ; puis synchronisation estimée du texte brut.
+    const netease = await neteasePromise;
     if (netease) lyrics = { synced: netease, plain: lyrics.plain };
-    else if (lyrics.plain && track.durationMs) lyrics = { synced: estimateSync(lyrics.plain, track.durationMs), plain: lyrics.plain, estimated: true };
+    else {
+      const plain = lyrics.plain ?? (await geniusPromise);
+      if (plain && track.durationMs) lyrics = { synced: estimateSync(plain, track.durationMs), plain, estimated: true };
+    }
   }
   // LRCLIB injoignable et rien d'autre : on le dit, sans mémoriser l'échec (la prochaine demande réessaiera).
   if (lrclibDown) return lyrics.synced || lyrics.plain ? lyrics : { synced: null, plain: null, unavailable: true };

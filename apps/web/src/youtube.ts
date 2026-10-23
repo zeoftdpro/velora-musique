@@ -16,6 +16,11 @@ export type YTPlayer = {
   getVideoLoadedFraction(): number;
   getPlayerState(): number;
   destroy(): void;
+  // Module « captions » (sous-titres) : présent dans l'API IFrame, mais non documenté.
+  loadModule(module: 'captions'): void;
+  unloadModule(module: 'captions'): void;
+  getOption(module: 'captions', option: 'tracklist'): { languageCode: string; kind?: string }[] | undefined;
+  setOption(module: 'captions', option: 'track' | 'fontSize', value: unknown): void;
 };
 
 type YTNamespace = {

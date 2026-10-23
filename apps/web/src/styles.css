@@ -789,6 +789,7 @@ input.import-card__name:focus { border-color: var(--text); }
 }
 .fs__btn:hover { background: rgba(255, 255, 255, 0.2); }
 .fs__btn.is-on { background: white; color: #0b0d17; }
+.fs__btn--text { width: auto; padding: 0 12px; font-size: 13px; font-weight: 700; letter-spacing: 0.04em; }
 .segmented--glass { background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(12px); }
 .segmented--glass button { color: rgba(255, 255, 255, 0.75); }
 .segmented--glass button[aria-checked='true'] { background: white; color: #0b0d17; }
@@ -867,6 +868,7 @@ input.import-card__name:focus { border-color: var(--text); }
 .fs-lyrics__empty { font-size: 24px; font-weight: 600; color: rgba(255, 255, 255, 0.7); margin: 0; align-self: center; }
 .fs__lyrics:has(.fs-lyrics__empty) { display: grid; mask-image: none; }
 .fs-lyrics__empty p { margin: 0 0 16px; }
+.fs-lyrics__hint { font-size: 16px; font-weight: 500; color: rgba(255, 255, 255, 0.6); }
 .fs-lyrics__retry { background: white; color: #0b0d17; font-size: 15px; }
 
 /* Clip YouTube superposé au-dessus du lecteur plein écran. */
