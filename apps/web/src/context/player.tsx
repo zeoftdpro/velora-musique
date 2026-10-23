@@ -303,7 +303,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
           if (isBackground() && skipInBackground()) return;
           stopAudio();
           setEngine('youtube');
-          setQuality('YouTube');
+          setQuality(null);
           const player = await getYouTubePlayer();
           if (id !== loadId.current) return;
           player.loadVideoById(videoId); // L'état (lecture, chargement, fin) arrive ensuite par onStateChange.

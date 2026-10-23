@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 
-/** Thème clair (par défaut), sombre, ou celui du système. Choix mémorisé dans le navigateur. */
+/** Thème sombre (par défaut), clair, ou celui du système. Choix mémorisé dans le navigateur. */
 export type ThemeChoice = 'light' | 'dark' | 'system';
 
-const KEY = 'velora.theme';
+// Nouvelle clé : le thème clair, un temps proposé par défaut, ne reste pas mémorisé chez ceux qui ne l'ont pas choisi.
+const KEY = 'velora.themeChoice';
 const DARK_QUERY = '(prefers-color-scheme: dark)';
 // Couleur du cadre autour des panneaux : barre d'état du téléphone et barre de titre de l'appli installée.
 const FRAME = { light: '#0e1120', dark: '#000000' } as const;
@@ -11,9 +12,9 @@ const FRAME = { light: '#0e1120', dark: '#000000' } as const;
 function readTheme(): ThemeChoice {
   try {
     const v = localStorage.getItem(KEY);
-    return v === 'dark' || v === 'system' ? v : 'light';
+    return v === 'light' || v === 'system' ? v : 'dark';
   } catch {
-    return 'light';
+    return 'dark';
   }
 }
 
@@ -31,13 +32,14 @@ export function initTheme() {
 
 export function useTheme() {
   const [choice, setChoice] = useState(readTheme);
-  useEffect(() => {
-    applyTheme(choice);
+  const choose = (next: ThemeChoice) => {
+    setChoice(next);
     try {
-      localStorage.setItem(KEY, choice);
+      localStorage.setItem(KEY, next);
     } catch {
       /* stockage indisponible : le choix vaut pour cette visite */
     }
-  }, [choice]);
-  return [choice, setChoice] as const;
+  };
+  useEffect(() => applyTheme(choice), [choice]);
+  return [choice, choose] as const;
 }

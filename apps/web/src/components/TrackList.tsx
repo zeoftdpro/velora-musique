@@ -49,9 +49,6 @@ export function TrackList({ tracks, showAlbum = true, showCover = true, offset =
               <div className="track__text">
                 <span className="track__title-row">
                   <span className="track__title">{track.title}</span>
-                  {track.source !== 'local' && (
-                    <span className={`source-pill source-pill--${track.source}`}>{track.source === 'youtube' ? 'YouTube' : 'Jamendo'}</span>
-                  )}
                 </span>
                 <Link className="track__artist" to={`/artist/${track.artist.id}`}>{track.artist.name}</Link>
               </div>

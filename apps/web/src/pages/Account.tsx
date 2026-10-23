@@ -10,8 +10,8 @@ import { useInstall } from '../pwa';
 import { useTheme, type ThemeChoice } from '../theme';
 
 const THEMES: { value: ThemeChoice; label: string }[] = [
-  { value: 'light', label: 'Clair' },
   { value: 'dark', label: 'Sombre' },
+  { value: 'light', label: 'Clair' },
   { value: 'system', label: 'Système' },
 ];
 
@@ -106,7 +106,7 @@ export function AccountPage() {
         <div className="setting">
           <div>
             <strong>Apparence</strong>
-            <p className="muted small">Thème clair, sombre, ou celui de votre appareil.</p>
+            <p className="muted small">Thème sombre, clair, ou celui de votre appareil.</p>
           </div>
           <div className="segmented" role="radiogroup" aria-label="Thème">
             {THEMES.map((t) => (
