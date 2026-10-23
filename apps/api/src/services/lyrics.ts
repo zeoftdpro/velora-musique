@@ -98,16 +98,21 @@ export async function findLyrics(track: { title: string; artist: string; album: 
       album_name: track.album,
       ...(seconds ? { duration: String(seconds) } : {}),
     });
-    if (!record || (!record.syncedLyrics && !record.plainLyrics)) {
-      record = closest((await get<LrclibRecord[]>('search', { track_name: title, artist_name: artist })) ?? [], seconds) ?? record;
+    // Tant qu'on n'a pas de version synchronisée, on cherche plus loin (en gardant le texte brut déjà trouvé).
+    const better = (current: LrclibRecord | null, found: LrclibRecord | null) =>
+      found && (found.syncedLyrics || !current?.plainLyrics) ? found : current;
+    if (!record?.syncedLyrics) {
+      record = better(record, closest((await get<LrclibRecord[]>('search', { track_name: title, artist_name: artist })) ?? [], seconds));
     }
-    if (!record || (!record.syncedLyrics && !record.plainLyrics)) {
-      record = closest((await get<LrclibRecord[]>('search', { q: `${artist} ${title}` })) ?? [], seconds) ?? record;
+    if (!record?.syncedLyrics) {
+      record = better(record, closest((await get<LrclibRecord[]>('search', { q: `${artist} ${title}` })) ?? [], seconds));
     }
   } catch (error) {
-    // Service indisponible : on le dit, sans mémoriser l'échec (la prochaine demande réessaiera).
-    if (error instanceof Unavailable) return { synced: null, plain: null, unavailable: true };
-    throw error;
+    if (!(error instanceof Unavailable)) throw error;
+    // Service indisponible en cours de route : ce qui a déjà été trouvé (texte brut) vaut mieux que rien ;
+    // rien n'est mémorisé, la prochaine demande réessaiera.
+    if (record?.syncedLyrics || record?.plainLyrics) return toLyrics(record);
+    return { synced: null, plain: null, unavailable: true };
   }
   const lyrics = toLyrics(record);
   if (cache.size >= CACHE_MAX) cache.delete(cache.keys().next().value!);
