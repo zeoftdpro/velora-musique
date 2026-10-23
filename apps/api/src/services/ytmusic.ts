@@ -112,6 +112,33 @@ function findContinuation(node: unknown): string | null {
   return text.match(/"continuationCommand":\{"token":"([^"]+)"/)?.[1] ?? text.match(/"nextContinuationData":\{"continuation":"([^"]+)"/)?.[1] ?? null;
 }
 
+// Le client Android de YouTube Music reçoit les paroles horodatées ; le client web, seulement le texte.
+const ANDROID_CLIENT = { clientName: 'ANDROID_MUSIC', clientVersion: '7.27.52', androidSdkVersion: 30, hl: 'fr', gl: env.YOUTUBE_REGION_CODE };
+
+async function callAndroid(endpoint: 'next' | 'browse', body: Record<string, unknown>) {
+  const res = await fetch(`${ORIGIN}/youtubei/v1/${endpoint}?prettyPrint=false`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'user-agent': 'com.google.android.apps.youtube.music/7.27.52 (Linux; U; Android 11) gzip' },
+    body: JSON.stringify({ context: { client: ANDROID_CLIENT }, ...body }),
+    signal: AbortSignal.timeout(6000),
+  });
+  if (!res.ok) throw new Error(`YouTube Music HTTP ${res.status}`);
+  return res.json() as Promise<unknown>;
+}
+
+/** Paroles de YouTube Music pour cette vidéo précise (onglet « Paroles ») : horodatées quand elles existent. */
+export async function ytMusicLyrics(videoId: string): Promise<{ synced: { time: number; text: string }[] | null; plain: string | null } | null> {
+  const next = JSON.stringify(await callAndroid('next', { videoId, isAudioOnly: true }));
+  const browseId = next.match(/"browseId":"(MPLY[^"]+)"/)?.[1];
+  if (!browseId) return null;
+  const page = await callAndroid('browse', { browseId });
+  const timed = findKey(page, 'timedLyricsData') as { lyricLine: string; cueRange: { startTimeMilliseconds: string } }[] | undefined;
+  const synced = timed?.length ? timed.map((l) => ({ time: Number(l.cueRange.startTimeMilliseconds), text: l.lyricLine.trim() })) : null;
+  const plainRuns = (findKey(page, 'musicDescriptionShelfRenderer') as { description?: { runs?: { text: string }[] } } | undefined)?.description?.runs;
+  const plain = plainRuns?.map((r) => r.text).join('').trim() || (synced ? synced.map((l) => l.text).join('\n') : null);
+  return synced || plain ? { synced, plain } : null;
+}
+
 /** Recherche YouTube Music : titres officiels (par défaut), vidéos, ou tout. */
 export async function searchYtMusic(query: string, filter: SearchFilter = 'songs'): Promise<YtmTrack[]> {
   const data = await call('search', { query, ...(filter !== 'all' ? { params: FILTERS[filter] } : {}) });

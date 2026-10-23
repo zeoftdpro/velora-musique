@@ -237,7 +237,7 @@ function wordTimings(line: LyricLine, nextTime: number | undefined): Word[] {
     return line.words.map((w, i, all) => ({
       text: w.text.trim(),
       start: w.time,
-      end: all[i + 1]?.time ?? Math.min(nextTime ?? w.time + 1200, w.time + 1500),
+      end: w.end ?? all[i + 1]?.time ?? Math.min(nextTime ?? w.time + 1200, w.time + 1500),
     }));
   }
   const words = line.text.split(/\s+/).filter(Boolean);

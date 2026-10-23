@@ -1,13 +1,15 @@
 /**
- * Paroles synchronisées : LRCLIB (base libre et gratuite, sans clé), puis NetEase ; à défaut, le texte brut
- * est synchronisé par estimation. Les réponses sont gardées en mémoire, le CDN prend le relais pour les titres publics.
+ * Paroles synchronisées : Deezer (mot à mot le plus souvent), LRCLIB, NetEase ; à défaut, le texte brut (Deezer,
+ * LRCLIB, Genius) est synchronisé par estimation. Les réponses sont gardées en mémoire, le CDN prend le relais pour les titres publics.
  */
+import { ytMusicLyrics } from './ytmusic.js';
+
 const API = 'https://lrclib.net/api';
 const HEADERS = { 'user-agent': 'Velora (https://velora-musique.vercel.app)' };
 const CACHE_MAX = 500;
 
 /** `words` : horodatage mot à mot, quand la source le fournit (LRC « enrichi » : `<00:12.34>mot`). */
-export type LyricLine = { time: number; text: string; words?: { time: number; text: string }[] };
+export type LyricLine = { time: number; text: string; words?: { time: number; end?: number; text: string }[] };
 /** `unavailable` : LRCLIB n'a pas répondu (réessayer plus tard), à distinguer de « pas de paroles ». */
 /** `estimated` : horodatage deviné à partir du texte brut (aucune source synchronisée trouvée). */
 export type Lyrics = { synced: LyricLine[] | null; plain: string | null; unavailable?: boolean; estimated?: boolean };
@@ -222,26 +224,111 @@ export function estimateSync(plain: string, durationMs: number): LyricLine[] {
   });
 }
 
-export async function findLyrics(track: { title: string; artist: string; album: string; durationMs: number }): Promise<Lyrics> {
-  const key = `${track.artist}|${track.title}|${Math.round(track.durationMs / 1000)}`;
-  const hit = cache.get(key);
-  if (hit) return hit;
+// ---------- Deezer : paroles synchronisées, souvent mot à mot (jeton anonyme du site, sans compte). ----------
 
-  const title = cleanTitle(track.title) || track.title;
-  const artist = mainArtist(track.artist);
-  const seconds = Math.round(track.durationMs / 1000);
-  // Les sources de secours sont interrogées dès maintenant, en parallèle de LRCLIB : un titre absent de toutes
-  // les bases ne fait plus attendre la somme des délais. (Elles ne lèvent jamais d'erreur.)
-  const neteasePromise = neteaseSynced(title, artist, seconds);
-  const geniusPromise = geniusPlain(title, artist);
-  let record: LrclibRecord | null = null;
-  let lrclibDown = false;
+const DEEZER_HEADERS = { 'user-agent': NETEASE_HEADERS['user-agent'] };
+let deezerJwt: { token: string; expires: number } | null = null;
+
+async function deezerToken() {
+  if (deezerJwt && deezerJwt.expires > Date.now()) return deezerJwt.token;
+  const res = await fetch('https://auth.deezer.com/login/anonymous?jo=p&rto=c&i=c', { headers: DEEZER_HEADERS, signal: AbortSignal.timeout(5000) });
+  const { jwt } = (await res.json()) as { jwt?: string };
+  if (!jwt) throw new Error('jeton Deezer refusé');
+  // Expiration lue dans le jeton ; on le renouvelle une minute avant.
+  const exp = Number(JSON.parse(Buffer.from(jwt.split('.')[1] ?? '', 'base64url').toString() || '{}').exp) || 0;
+  deezerJwt = { token: jwt, expires: exp ? exp * 1000 - 60_000 : Date.now() + 30 * 60_000 };
+  return jwt;
+}
+
+const DEEZER_QUERY = `query GetLyrics($trackId: String!) {
+  track(trackId: $trackId) {
+    lyrics {
+      text
+      synchronizedLines { line milliseconds duration }
+      synchronizedWordByWordLines { start end words { start end word } }
+    }
+  }
+}`;
+
+type DeezerLyrics = {
+  text: string | null;
+  synchronizedLines: { line: string; milliseconds: number; duration: number }[] | null;
+  synchronizedWordByWordLines: { start: number; end: number; words: { start: number; end: number; word: string }[] }[] | null;
+};
+
+/** Une pause (points animés) quand la voix s'arrête plus de 6 s entre deux lignes. */
+function withPauses(lines: (LyricLine & { end: number })[]): LyricLine[] {
+  const out: LyricLine[] = [];
+  lines.forEach((line, i) => {
+    out.push({ time: line.time, text: line.text, ...(line.words ? { words: line.words } : {}) });
+    const next = lines[i + 1];
+    if (next && next.time - line.end > 6000) out.push({ time: line.end + 400, text: '' });
+  });
+  return out;
+}
+
+/** Paroles Deezer du morceau (même artiste, même titre). `shift` : écart de durée avec la version jouée (ms). */
+async function deezerLyrics(title: string, artist: string, seconds: number): Promise<{ synced: LyricLine[] | null; plain: string | null; shift: number } | null> {
   try {
-    // 1. Correspondance exacte (titre, artiste, album, durée) ; 2. recherche par champs ; 3. recherche libre.
+    type Hit = { id: number; title: string; duration: number; artist: { name: string } };
+    const search = async (q: string) =>
+      ((await (await fetch(`https://api.deezer.com/search?${new URLSearchParams({ q, limit: '10' })}`, { signal: AbortSignal.timeout(5000) })).json()) as { data?: Hit[] }).data ?? [];
+    const wantedArtist = normalize(artist);
+    const wantedTitle = normalize(title);
+    const matches = (h: Hit) => {
+      const a = normalize(h.artist.name);
+      const t = normalize(h.title.replace(/\s*[([](feat|ft|with|avec)\.?\s[^)\]]*[)\]]/gi, ''));
+      return (a.includes(wantedArtist) || wantedArtist.includes(a)) && (t.includes(wantedTitle) || wantedTitle.includes(t));
+    };
+    let hits = (await search(`artist:"${artist}" track:"${title}"`)).filter(matches);
+    if (hits.length === 0) hits = (await search(`${artist} ${title}`)).filter(matches);
+    // Version la plus proche en durée de celle qu'on joue (album, single, clip…).
+    const hit = hits.sort((a, b) => Math.abs(a.duration - seconds) - Math.abs(b.duration - seconds))[0];
+    if (!hit) return null;
+
+    const res = await fetch('https://pipe.deezer.com/api', {
+      method: 'POST',
+      headers: { ...DEEZER_HEADERS, 'content-type': 'application/json', authorization: `Bearer ${await deezerToken()}` },
+      body: JSON.stringify({ operationName: 'GetLyrics', variables: { trackId: String(hit.id) }, query: DEEZER_QUERY }),
+      signal: AbortSignal.timeout(6000),
+    });
+    const lyrics = ((await res.json()) as { data?: { track?: { lyrics?: DeezerLyrics | null } } }).data?.track?.lyrics;
+    if (!lyrics) return null;
+
+    const byWord = lyrics.synchronizedWordByWordLines?.filter((l) => l.words.length) ?? [];
+    const byLine = lyrics.synchronizedLines?.filter((l) => l.line.trim()) ?? [];
+    const synced = byWord.length
+      ? withPauses(byWord.map((l) => ({
+          time: l.start,
+          end: l.end,
+          text: l.words.map((w) => w.word).join(' '),
+          words: l.words.map((w) => ({ time: w.start, end: w.end, text: w.word })),
+        })))
+      : byLine.length
+        ? withPauses(byLine.map((l) => ({ time: l.milliseconds, end: l.milliseconds + l.duration, text: l.line })))
+        : null;
+    return { synced, plain: lyrics.text?.trim() || null, shift: seconds ? (seconds - hit.duration) * 1000 : 0 };
+  } catch {
+    return null;
+  }
+}
+
+/** Décale toutes les lignes (et leurs mots) de `ms`. */
+const shiftLines = (lines: LyricLine[], ms: number): LyricLine[] =>
+  lines.map((l) => ({
+    time: Math.max(0, l.time + ms),
+    text: l.text,
+    ...(l.words ? { words: l.words.map((w) => ({ time: Math.max(0, w.time + ms), end: w.end === undefined ? undefined : Math.max(0, w.end + ms), text: w.text })) } : {}),
+  }));
+
+/** LRCLIB : correspondance exacte (titre, artiste, album, durée), puis recherche par champs, puis recherche libre. */
+async function lrclibLookup(title: string, artist: string, album: string, seconds: number) {
+  let record: LrclibRecord | null = null;
+  try {
     record = await get<LrclibRecord>('get', {
       track_name: title,
       artist_name: artist,
-      album_name: track.album,
+      album_name: album,
       ...(seconds ? { duration: String(seconds) } : {}),
     });
     // Tant qu'on n'a pas de version synchronisée, on cherche plus loin (en gardant le texte brut déjà trouvé).
@@ -253,23 +340,62 @@ export async function findLyrics(track: { title: string; artist: string; album: 
     if (!record?.syncedLyrics) {
       record = better(record, closest((await get<LrclibRecord[]>('search', { q: `${artist} ${title}` })) ?? [], seconds));
     }
+    return { record, down: false };
   } catch (error) {
     if (!(error instanceof Unavailable)) throw error;
-    lrclibDown = true;
+    return { record, down: true };
   }
+}
 
-  let lyrics = toLyrics(record);
-  if (!lyrics.synced && !record?.instrumental) {
-    // 4. Seconde source (NetEase) ; 5. texte brut de Genius ; puis synchronisation estimée du texte brut.
-    const netease = await neteasePromise;
-    if (netease) lyrics = { synced: netease, plain: lyrics.plain };
-    else {
-      const plain = lyrics.plain ?? (await geniusPromise);
-      if (plain && track.durationMs) lyrics = { synced: estimateSync(plain, track.durationMs), plain, estimated: true };
+// Écart de durée au-delà duquel la version Deezer n'est pas celle qu'on joue (clip avec intro, version longue…).
+const SAME_VERSION_MS = 4000;
+
+/** `videoId` : vidéo YouTube jouée, pour les paroles que YouTube Music associe à cette vidéo précise. */
+export async function findLyrics(track: { title: string; artist: string; album: string; durationMs: number; videoId?: string | null }): Promise<Lyrics> {
+  const key = `${track.artist}|${track.title}|${Math.round(track.durationMs / 1000)}`;
+  const hit = cache.get(key);
+  if (hit) return hit;
+
+  const title = cleanTitle(track.title) || track.title;
+  const artist = mainArtist(track.artist);
+  const seconds = Math.round(track.durationMs / 1000);
+  // Toutes les sources sont interrogées en parallèle : un titre absent de toutes les bases ne fait pas attendre
+  // la somme des délais. (Seule LRCLIB peut signaler une panne ; les autres renvoient null.)
+  const deezerPromise = deezerLyrics(title, artist, seconds);
+  const neteasePromise = neteaseSynced(title, artist, seconds);
+  const geniusPromise = geniusPlain(title, artist);
+  const ytmPromise = track.videoId ? ytMusicLyrics(track.videoId).catch(() => null) : Promise.resolve(null);
+  const [deezer, lrclib, ytm] = await Promise.all([deezerPromise, lrclibLookup(title, artist, track.album, seconds), ytmPromise]);
+  const { record } = lrclib;
+  const lrc = toLyrics(record);
+
+  let lyrics: Lyrics;
+  if (deezer?.synced && Math.abs(deezer.shift) <= SAME_VERSION_MS) {
+    // 1. Deezer, même version : synchronisation à la voix, souvent mot à mot.
+    lyrics = { synced: deezer.synced, plain: deezer.plain ?? lrc.plain };
+  } else if (ytm?.synced) {
+    // 2. YouTube Music : paroles horodatées associées à la vidéo jouée elle-même.
+    lyrics = { synced: ytm.synced, plain: ytm.plain };
+  } else if (lrc.synced) {
+    // 3. LRCLIB (choisie au plus près de la durée jouée).
+    lyrics = lrc;
+  } else {
+    const netease = record?.instrumental ? null : await neteasePromise;
+    if (netease) {
+      // 4. NetEase (durée vérifiée).
+      lyrics = { synced: netease, plain: lrc.plain };
+    } else if (deezer?.synced) {
+      // 5. Deezer, autre version (souvent un clip avec une intro) : on décale de l'écart de durée, réglable à l'oreille.
+      lyrics = { synced: shiftLines(deezer.synced, deezer.shift), plain: deezer.plain, estimated: true };
+    } else {
+      // 6. Texte brut (Deezer, YouTube Music, LRCLIB, Genius) synchronisé par estimation.
+      const plain = record?.instrumental ? null : deezer?.plain ?? ytm?.plain ?? lrc.plain ?? (await geniusPromise);
+      lyrics = plain && track.durationMs ? { synced: estimateSync(plain, track.durationMs), plain, estimated: true } : { synced: null, plain: null };
     }
   }
-  // LRCLIB injoignable et rien d'autre : on le dit, sans mémoriser l'échec (la prochaine demande réessaiera).
-  if (lrclibDown) return lyrics.synced || lyrics.plain ? lyrics : { synced: null, plain: null, unavailable: true };
+
+  // LRCLIB injoignable et rien ailleurs : on le dit, sans mémoriser l'échec (la prochaine demande réessaiera).
+  if (lrclib.down) return lyrics.synced || lyrics.plain ? lyrics : { synced: null, plain: null, unavailable: true };
   if (cache.size >= CACHE_MAX) cache.delete(cache.keys().next().value!);
   cache.set(key, lyrics);
   return lyrics;

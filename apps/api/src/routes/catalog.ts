@@ -8,6 +8,7 @@ import { IdParams, Pagination, parse } from '../lib/validation.js';
 import { selectAlbums, selectTracks, toAlbumDto, toArtistDto, toTrackDto, visibleTo } from '../services/catalog.js';
 import { syncFromJamendo } from '../services/jamendo.js';
 import { findLyrics } from '../services/lyrics.js';
+import { videoIdOf } from '../services/youtube.js';
 import { search, searchWeb } from '../services/search.js';
 
 // `source=local` : uniquement le catalogue ingéré, sans les titres mis en cache depuis YouTube ou Jamendo.
@@ -104,7 +105,13 @@ export default async function catalogRoutes(app: FastifyInstance) {
     const { id } = parse(IdParams, req.params);
     const [row] = await selectTracks(eq(tracks.id, id), req.user?.sub);
     if (!row) throw notFound('Titre');
-    const lyrics = await findLyrics({ title: row.title, artist: row.artistName, album: row.albumTitle, durationMs: row.durationMs });
+    const lyrics = await findLyrics({
+      title: row.title,
+      artist: row.artistName,
+      album: row.albumTitle,
+      durationMs: row.durationMs,
+      videoId: videoIdOf(row.externalId),
+    });
     // Titres publics : mêmes paroles pour tout le monde, le CDN peut les garder.
     // Service indisponible : rien en cache, la prochaine demande réessaiera. Rien de trouvé : cache court.
     const found = Boolean(lyrics.synced || lyrics.plain);
