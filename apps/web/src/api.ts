@@ -72,7 +72,8 @@ export type ImportSource = {
   truncated: boolean;
 };
 /** Paroles : `synced` horodatées à la ligne (ms), sinon texte brut. */
-export type Lyrics = { synced: { time: number; text: string }[] | null; plain: string | null };
+export type LyricLine = { time: number; text: string; /** Mot à mot, quand la source le fournit. */ words?: { time: number; text: string }[] };
+export type Lyrics = { synced: LyricLine[] | null; plain: string | null };
 export type Session = { user: User; accessToken: string; expiresIn: number };
 
 // ---------------------------------------------------------------------------

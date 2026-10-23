@@ -16,7 +16,6 @@ import { AuthPage } from './pages/Auth';
 import { HomePage } from './pages/Home';
 import { ImportPage } from './pages/Import';
 import { LibraryPage, LikedPage } from './pages/Library';
-import { LyricsPage } from './pages/Lyrics';
 import { PlaylistPage } from './pages/Playlist';
 import { SearchPage } from './pages/Search';
 import { TrackPage } from './pages/Track';
@@ -76,7 +75,6 @@ createRoot(document.getElementById('root')!).render(
                 <Route path="playlist/:id" element={<PlaylistPage />} />
                 <Route path="track/:id" element={<TrackPage />} />
                 <Route path="import" element={<ImportPage />} />
-                <Route path="lyrics" element={<LyricsPage />} />
                 <Route path="account" element={<AccountPage />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Route>

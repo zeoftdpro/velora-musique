@@ -35,9 +35,15 @@ type PlayerState = {
   /** Panneau « En cours de lecture » (à droite, sur grand écran). */
   panelOpen: boolean;
   togglePanel: () => void;
-  /** Emplacement du clip YouTube dans le panneau (ref callback) ; le lecteur vient s'y superposer. */
-  registerVideoSlot: (el: HTMLElement | null) => void;
+  /**
+   * Déclare un emplacement pour le clip YouTube (panneau, plein écran) : le lecteur vient se superposer au plus
+   * récent. Renvoie la fonction qui le retire. Voir useVideoSlot.
+   */
+  addVideoSlot: (el: HTMLElement) => () => void;
   videoInPanel: boolean;
+  /** Lecteur plein écran (pochette ou clip, commandes et paroles). */
+  nowPlayingOpen: boolean;
+  setNowPlayingOpen: (open: boolean) => void;
   playQueue: (tracks: Track[], startIndex?: number, source?: QueueSource) => void;
   playNext: (track: Track) => void;
   addToQueue: (track: Track) => void;
@@ -175,6 +181,17 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   // Suggestions demandées pour le dernier titre de la file (une seule fois par titre).
   const radioRef = useRef<{ seed: string; promise: Promise<Track[]> } | null>(null);
   const [videoSlot, setVideoSlot] = useState<HTMLElement | null>(null);
+  // Emplacements déclarés, du plus ancien au plus récent : fermer le plein écran rend le clip au panneau.
+  const slotStack = useRef<HTMLElement[]>([]);
+  const addVideoSlot = useCallback((el: HTMLElement) => {
+    slotStack.current = [...slotStack.current.filter((e) => e !== el), el];
+    setVideoSlot(el);
+    return () => {
+      slotStack.current = slotStack.current.filter((e) => e !== el);
+      setVideoSlot(slotStack.current.at(-1) ?? null);
+    };
+  }, []);
+  const [nowPlayingOpen, setNowPlayingOpen] = useState(false);
   const [slotRect, setSlotRect] = useState<SlotRect | null>(null);
   // Ordre d'origine de la file, conservé pendant la lecture aléatoire.
   const originalQueue = useRef<Track[] | null>(null);
@@ -763,12 +780,12 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const value = useMemo<PlayerState>(
     () => ({
       queue, index, current, playing, loading, volume, muted, quality, videoHidden,
-      shuffle, repeat, autoplay, playlistChain, queueSource, panelOpen, videoInPanel: slotRect !== null, registerVideoSlot: setVideoSlot,
+      shuffle, repeat, autoplay, playlistChain, queueSource, panelOpen, videoInPanel: slotRect !== null, addVideoSlot, nowPlayingOpen, setNowPlayingOpen,
       playQueue, playNext, addToQueue, jumpTo, toggle, next, prev, seek, setVolume, toggleMute, toggleVideo,
       toggleShuffle, cycleRepeat, toggleAutoplay, togglePlaylistChain, togglePanel,
     }),
     [queue, index, current, playing, loading, volume, muted, quality, videoHidden, shuffle, repeat, autoplay, playlistChain, queueSource,
-      panelOpen, slotRect, playQueue, playNext, addToQueue, jumpTo, toggle, next, prev, seek, setVolume, toggleMute, toggleVideo,
+      panelOpen, slotRect, addVideoSlot, nowPlayingOpen, playQueue, playNext, addToQueue, jumpTo, toggle, next, prev, seek, setVolume, toggleMute, toggleVideo,
       toggleShuffle, cycleRepeat, toggleAutoplay, togglePlaylistChain, togglePanel],
   );
 
@@ -811,3 +828,11 @@ export function usePlayer() {
 }
 
 export const useProgress = () => useContext(ProgressContext);
+
+/** Ref callback d'un emplacement de clip YouTube, actif tant que l'élément est monté. */
+export function useVideoSlot() {
+  const { addVideoSlot } = usePlayer();
+  const [el, setEl] = useState<HTMLElement | null>(null);
+  useEffect(() => (el ? addVideoSlot(el) : undefined), [el, addVideoSlot]);
+  return setEl;
+}

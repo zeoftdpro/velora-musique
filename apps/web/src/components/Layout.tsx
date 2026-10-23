@@ -5,6 +5,7 @@ import { useToast } from '../context/toast';
 import { usePlayer } from '../context/player';
 import { PANEL_MEDIA, useMediaQuery } from '../hooks';
 import { useInstall } from '../pwa';
+import { FullscreenPlayer } from './FullscreenPlayer';
 import { InstallBanner } from './InstallBanner';
 import { NowPlayingPanel } from './NowPlaying';
 import { PlayerBar } from './PlayerBar';
@@ -76,6 +77,7 @@ export function Layout() {
 
       {showPanel && <NowPlayingPanel />}
       <PlayerBar />
+      <FullscreenPlayer />
     </div>
   );
 }

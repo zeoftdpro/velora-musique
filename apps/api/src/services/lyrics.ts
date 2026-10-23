@@ -6,19 +6,26 @@ const API = 'https://lrclib.net/api';
 const HEADERS = { 'user-agent': 'Velora (https://velora-musique.vercel.app)' };
 const CACHE_MAX = 500;
 
-export type Lyrics = { synced: { time: number; text: string }[] | null; plain: string | null };
+/** `words` : horodatage mot à mot, quand la source le fournit (LRC « enrichi » : `<00:12.34>mot`). */
+export type LyricLine = { time: number; text: string; words?: { time: number; text: string }[] };
+export type Lyrics = { synced: LyricLine[] | null; plain: string | null };
 type LrclibRecord = { duration: number; instrumental: boolean; plainLyrics: string | null; syncedLyrics: string | null };
 
 const cache = new Map<string, Lyrics>();
+const toMs = (min: string, sec: string) => Math.round((Number(min) * 60 + Number(sec)) * 1000);
 
 /** « [01:23.45] texte » → { time: 83450, text } ; les lignes vides (pauses) sont gardées. */
 function parseLrc(lrc: string) {
-  const lines: { time: number; text: string }[] = [];
+  const lines: LyricLine[] = [];
   for (const raw of lrc.split(/\r?\n/)) {
     const stamps = [...raw.matchAll(/\[(\d+):(\d+(?:\.\d+)?)\]/g)];
     if (stamps.length === 0) continue;
-    const text = raw.replace(/\[\d+:\d+(?:\.\d+)?\]/g, '').trim();
-    for (const s of stamps) lines.push({ time: Math.round((Number(s[1]) * 60 + Number(s[2])) * 1000), text });
+    const body = raw.replace(/\[\d+:\d+(?:\.\d+)?\]/g, '');
+    const words = [...body.matchAll(/<(\d+):(\d+(?:\.\d+)?)>([^<]*)/g)]
+      .map((m) => ({ time: toMs(m[1]!, m[2]!), text: m[3]! }))
+      .filter((w) => w.text.trim());
+    const text = body.replace(/<\d+:\d+(?:\.\d+)?>/g, '').replace(/\s+/g, ' ').trim();
+    for (const s of stamps) lines.push({ time: toMs(s[1]!, s[2]!), text, ...(words.length ? { words } : {}) });
   }
   return lines.sort((a, b) => a.time - b.time);
 }

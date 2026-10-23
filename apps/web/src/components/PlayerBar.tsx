@@ -1,18 +1,18 @@
 import { useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { formatDuration } from '../api';
 import { useLibrary } from '../context/library';
 import { usePlayer, useProgress } from '../context/player';
 import { Cover } from './Cover';
 import { PANEL_MEDIA, useCoverColor, useMediaQuery } from '../hooks';
 import { AddToPlaylistButton } from './AddToPlaylist';
-import { HeartIcon, LyricsIcon, NextIcon, PanelIcon, PauseIcon, PlayIcon, PrevIcon, RepeatIcon, ShuffleIcon, VideoIcon, VolumeIcon } from './icons';
+import { HeartIcon, LyricsIcon, MaximizeIcon, NextIcon, PanelIcon, PauseIcon, PlayIcon, PrevIcon, RepeatIcon, ShuffleIcon, VideoIcon, VolumeIcon } from './icons';
 
 export function PlayerBar() {
   const {
     current, playing, loading, toggle, next, prev, volume, muted, setVolume, toggleMute, quality, queue, index,
     videoHidden, toggleVideo, shuffle, toggleShuffle, repeat, cycleRepeat, panelOpen, togglePanel, videoInPanel,
-    playlistChain, queueSource,
+    playlistChain, queueSource, setNowPlayingOpen,
   } = usePlayer();
   // Fin de la file : « suivant » reste possible si la file boucle ou si une autre playlist va s'enchaîner.
   const hasNext = index < queue.length - 1 || repeat === 'all' || (playlistChain && queueSource?.kind === 'playlist');
@@ -20,18 +20,11 @@ export function PlayerBar() {
   const wide = useMediaQuery(PANEL_MEDIA);
   const repeatLabel = repeat === 'off' ? 'Répéter : désactivé' : repeat === 'all' ? 'Répéter : toute la file' : 'Répéter : ce titre';
   const tint = useCoverColor(current?.album.coverUrl, current?.title ?? '');
-  const location = useLocation();
-  const navigate = useNavigate();
-  const onLyrics = location.pathname === '/lyrics';
-  // Les paroles s'ouvrent comme une page ; le même bouton ramène à la page précédente.
-  const toggleLyrics = () => {
-    if (!onLyrics) navigate('/lyrics');
-    else if (location.key !== 'default') navigate(-1);
-    else navigate('/'); // page ouverte directement : pas d'historique où revenir
-  };
+  const narrow = useMediaQuery('(max-width: 860px)');
+  // Paroles, pochette, clip : tout s'affiche dans le lecteur plein écran.
   const lyricsButton = (className: string) => (
-    <button className={`icon-btn ${className} ${onLyrics ? 'is-on' : ''}`} onClick={toggleLyrics} disabled={!current}
-      aria-label="Paroles" aria-pressed={onLyrics} title="Paroles">
+    <button className={`icon-btn ${className}`} onClick={() => setNowPlayingOpen(true)} disabled={!current}
+      aria-label="Paroles" title="Paroles et plein écran">
       <LyricsIcon size={18} />
     </button>
   );
@@ -39,10 +32,18 @@ export function PlayerBar() {
   return (
     <footer className={`player ${current ? '' : 'player--idle'}`} aria-label="Lecteur"
       style={current ? ({ '--tint': tint } as React.CSSProperties) : undefined}>
-      <div className="player__now">
+      {/* Sur téléphone, toucher le mini-lecteur ouvre le lecteur plein écran (les boutons gardent leur action). */}
+      <div className="player__now" onClickCapture={(e) => {
+        if (!narrow || !current || (e.target as HTMLElement).closest('button')) return;
+        e.preventDefault();
+        setNowPlayingOpen(true);
+      }}>
         {current ? (
           <>
-            <Cover src={current.album.coverUrl} alt={current.album.title} size={56} />
+            <button className="player__cover" onClick={() => setNowPlayingOpen(true)} aria-label="Ouvrir le lecteur plein écran" title="Plein écran">
+              <Cover src={current.album.coverUrl} alt={current.album.title} size={56} />
+              <span className="player__cover-hint" aria-hidden><MaximizeIcon size={18} /></span>
+            </button>
             <div className="player__meta">
               <Link to={`/album/${current.album.id}`} className="player__title">{current.title}</Link>
               <Link to={`/artist/${current.artist.id}`} className="player__artist">{current.artist.name}</Link>
@@ -104,7 +105,7 @@ export function PlayerBar() {
   );
 }
 
-function SeekBar() {
+export function SeekBar() {
   const { seek, current } = usePlayer();
   const { currentTime, duration, buffered } = useProgress();
   // Pendant le glissement, on affiche la position visée sans interrompre la lecture.

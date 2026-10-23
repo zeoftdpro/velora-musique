@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { formatDuration } from '../api';
 import { useLibrary } from '../context/library';
-import { usePlayer } from '../context/player';
+import { usePlayer, useVideoSlot } from '../context/player';
 import { AddToPlaylistButton } from './AddToPlaylist';
 import { Cover } from './Cover';
 import { useShareTrack } from '../share';
@@ -11,9 +11,10 @@ const UP_NEXT_COUNT = 10;
 
 /** Panneau « En cours de lecture », à droite (comme Spotify) : clip YouTube ou pochette, infos et file d'attente. */
 export function NowPlayingPanel() {
-  const { current, queue, index, togglePanel, registerVideoSlot, jumpTo, autoplay, toggleAutoplay, playlistChain, togglePlaylistChain, queueSource } = usePlayer();
+  const { current, queue, index, togglePanel, jumpTo, autoplay, toggleAutoplay, playlistChain, togglePlaylistChain, queueSource } = usePlayer();
   const { favoriteIds, toggleFavorite } = useLibrary();
   const shareTrack = useShareTrack();
+  const videoSlot = useVideoSlot();
 
   if (!current) {
     return (
@@ -39,7 +40,7 @@ export function NowPlayingPanel() {
 
       {current.source === 'youtube' ? (
         // Emplacement du clip : le lecteur YouTube (géré par PlayerProvider) vient s'y superposer.
-        <div className="np__video" ref={registerVideoSlot} />
+        <div className="np__video" ref={videoSlot} />
       ) : (
         <div className="np__art"><Cover src={current.album.coverUrl} alt={current.album.title} /></div>
       )}
