@@ -828,6 +828,11 @@ input.import-card__name:focus { border-color: var(--text); }
 .fs-controls__play.is-loading { animation: pulse 1s ease-in-out infinite; }
 .fs__volume { display: flex; align-items: center; gap: 8px; padding: 0 2px; }
 .fs__volume .range { flex: 1; }
+.fs__offset { display: flex; align-items: center; gap: 6px; font-size: 13px; color: rgba(255, 255, 255, 0.7); }
+.fs__offset span { flex: 1; }
+.fs__offset button { padding: 5px 10px; border-radius: 8px; background: rgba(255, 255, 255, 0.12); color: white; font-weight: 600; }
+.fs__offset button:hover { background: rgba(255, 255, 255, 0.22); }
+.fs__offset output { min-width: 44px; text-align: center; font-variant-numeric: tabular-nums; color: white; }
 
 /* Paroles : grandes lignes à gauche ; la ligne chantée se remplit mot à mot. */
 .fs__lyrics {

@@ -46,6 +46,9 @@ function FullscreenView() {
   const [mobileView, setMobileView] = useState<'player' | 'lyrics'>('player');
   const [lyricsHidden, setLyricsHidden] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(() => Boolean(document.fullscreenElement));
+  // Décalage des paroles estimées (ms, positif : plus tard), remis à zéro à chaque titre.
+  const [offset, setOffset] = useState(0);
+  useEffect(() => setOffset(0), [track.id]);
   const videoSlot = useVideoSlot();
 
   const isYoutube = track.source === 'youtube';
@@ -148,11 +151,20 @@ function FullscreenView() {
             <input className="range" type="range" min={0} max={1} step={0.01} value={muted ? 0 : volume} aria-label="Volume"
               onChange={(e) => setVolume(Number(e.target.value))} style={{ '--fill': `${(muted ? 0 : volume) * 100}%` } as React.CSSProperties} />
           </div>
+          {lyrics?.estimated && showLyrics && (
+            // Aucune version synchronisée n'existe : l'horodatage est deviné, on peut le caler à l'oreille.
+            <div className="fs__offset">
+              <span>Synchro estimée</span>
+              <button onClick={() => setOffset((o) => o - 1000)} aria-label="Paroles plus tôt">− 1 s</button>
+              <output>{offset === 0 ? '0 s' : `${offset > 0 ? '+' : '−'}${Math.abs(offset / 1000)} s`}</output>
+              <button onClick={() => setOffset((o) => o + 1000)} aria-label="Paroles plus tard">+ 1 s</button>
+            </div>
+          )}
         </section>
 
         {showLyrics && (
           <section className="fs__lyrics" aria-label="Paroles">
-            <LyricsBody lyrics={lyrics} loading={lyricsLoading} failed={Boolean(lyricsError || lyrics?.unavailable)} onRetry={reloadLyrics} />
+            <LyricsBody lyrics={lyrics} loading={lyricsLoading} failed={Boolean(lyricsError || lyrics?.unavailable)} onRetry={reloadLyrics} offset={offset} />
           </section>
         )}
       </div>
@@ -160,7 +172,13 @@ function FullscreenView() {
   );
 }
 
-function LyricsBody({ lyrics, loading, failed, onRetry }: { lyrics: Lyrics | null; loading: boolean; failed: boolean; onRetry: () => void }) {
+function LyricsBody({ lyrics, loading, failed, onRetry, offset }: {
+  lyrics: Lyrics | null;
+  loading: boolean;
+  failed: boolean;
+  onRetry: () => void;
+  offset: number;
+}) {
   if (loading) return <p className="fs-lyrics__empty">Recherche des paroles…</p>;
   if (failed) {
     return (
@@ -170,7 +188,7 @@ function LyricsBody({ lyrics, loading, failed, onRetry }: { lyrics: Lyrics | nul
       </div>
     );
   }
-  if (lyrics?.synced) return <SyncedLyrics lines={lyrics.synced} />;
+  if (lyrics?.synced) return <SyncedLyrics lines={lyrics.synced} offset={offset} />;
   if (lyrics?.plain) {
     return (
       <div className="fs-lyrics fs-lyrics--plain">
@@ -212,8 +230,10 @@ function wordTimings(line: LyricLine, nextTime: number | undefined): Word[] {
 
 const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 
-function SyncedLyrics({ lines }: { lines: LyricLine[] }) {
+function SyncedLyrics({ lines, offset }: { lines: LyricLine[]; offset: number }) {
   const { seek, playing } = usePlayer();
+  const offsetRef = useRef(offset);
+  offsetRef.current = offset;
   const { currentTime } = useProgress();
   const [active, setActive] = useState(-1);
   const listRef = useRef<HTMLOListElement>(null);
@@ -231,7 +251,7 @@ function SyncedLyrics({ lines }: { lines: LyricLine[] }) {
     let shown = -2;
     const tick = () => {
       const c = clock.current;
-      const now = (c.playing ? c.t + (performance.now() - c.at) / 1000 : c.t) * 1000 + 120;
+      const now = (c.playing ? c.t + (performance.now() - c.at) / 1000 : c.t) * 1000 + 120 - offsetRef.current;
       let i = -1;
       while (i + 1 < lines.length && lines[i + 1]!.time <= now) i++;
       if (i !== shown) {
@@ -259,7 +279,7 @@ function SyncedLyrics({ lines }: { lines: LyricLine[] }) {
     <ol className="fs-lyrics" ref={listRef} onWheel={markUserScroll} onTouchMove={markUserScroll}>
       {lines.map((line, i) => (
         <li key={i} className={i === active ? 'is-active' : i < active ? 'is-past' : ''}>
-          <button onClick={() => seek(line.time / 1000)}>
+          <button onClick={() => seek(Math.max(0, line.time + offset) / 1000)}>
             {line.text ? (
               timings[i]!.map((w, j) => <span key={j} data-w="">{w.text} </span>)
             ) : (

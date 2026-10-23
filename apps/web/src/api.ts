@@ -74,7 +74,8 @@ export type ImportSource = {
 /** Paroles : `synced` horodatées à la ligne (ms), sinon texte brut. */
 export type LyricLine = { time: number; text: string; /** Mot à mot, quand la source le fournit. */ words?: { time: number; text: string }[] };
 /** `unavailable` : le service de paroles n'a pas répondu (réessayer), à distinguer de « pas de paroles ». */
-export type Lyrics = { synced: LyricLine[] | null; plain: string | null; unavailable?: boolean };
+/** `estimated` : horodatage deviné à partir du texte brut (aucune version synchronisée trouvée). */
+export type Lyrics = { synced: LyricLine[] | null; plain: string | null; unavailable?: boolean; estimated?: boolean };
 export type Session = { user: User; accessToken: string; expiresIn: number };
 
 // ---------------------------------------------------------------------------
